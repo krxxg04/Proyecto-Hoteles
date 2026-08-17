@@ -1,0 +1,39 @@
+# === Dependencias ===
+node_modules/
+
+# === Entorno / secretos (NUNCA versionar) ===
+.env
+.env.*
+*.local
+*.pem
+*.key
+secrets*.json
+
+# === Build / salida ===
+dist/
+build/
+.next/
+out/
+.cache/
+
+# === Sistema operativo ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Editores ===
+.vscode/
+.idea/
+*.swp
+*~
+
+# === Respaldos locales (git ya es tu respaldo) ===
+* - copia.*
+*.bak
+*.old
+
+# === Medios pesados (fotos/video van a R2, no al repo) ===
+*.mp4
+*.mov
+*.avi
+*.mkv

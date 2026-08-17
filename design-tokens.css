@@ -1,0 +1,104 @@
+/* ============================================================================
+   ATLAS · Design Tokens — Fuente única de verdad
+   Extraído de: C:\Users\Usuario\Documents\UX UI\docs\02-design-tokens
+   Filosofía: dark-first · 90% neutral / 8% acento / 2% semántico
+   Sin #000 ni #FFF puros. El color comunica, no decora.
+   ============================================================================ */
+:root {
+  /* ---- Fondo (capas de profundidad, no sombras) ---- */
+  --bg-base:        #111315;   /* lienzo de la app */
+  --bg-secondary:   #17191C;   /* zonas / paneles */
+  --bg-tertiary:    #1D2024;   /* realces internos */
+
+  /* ---- Superficies (componentes) + estados ---- */
+  --surface:        #181B1F;
+  --surface-hover:  #20242A;
+  --surface-pressed:#282D33;
+  --surface-float:  #24282E;   /* dropdowns, drawers, modales */
+
+  /* ---- Acento primario (violeta Atlas) — usar con moderación ---- */
+  --primary-500:    #7C4DFF;
+  --primary-600:    #6D3EF2;
+  --primary-700:    #5B2FD6;
+  --primary-soft:   rgba(124,77,255,.12);   /* wash para chips/hover */
+
+  /* ---- Semánticos (siempre con ícono + texto, nunca solo color) ---- */
+  --danger:   #EF4444;  --danger-soft:  rgba(239,68,68,.12);
+  --warning:  #F59E0B;  --warning-soft: rgba(245,158,11,.12);
+  --success:  #22C55E;  --success-soft: rgba(34,197,94,.12);
+  --info:     #3B82F6;  --info-soft:    rgba(59,130,246,.12);
+
+  /* ---- Texto (jerarquía por peso/valor, no por color aleatorio) ---- */
+  --text-primary:   #F1F3F4;   /* casi-blanco, nunca #FFF */
+  --text-secondary: #A8ADB3;
+  --text-muted:     #747B84;
+  --text-disabled:  #525860;
+
+  /* ---- Bordes: estructura sutil, un solo estilo ---- */
+  --border:         rgba(255,255,255,.08);
+  --border-strong:  rgba(255,255,255,.14);
+  --border-focus:   var(--primary-500);
+
+  /* ---- Tipografía (una sola familia; el peso separa énfasis) ---- */
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --fs-display: 40px;  --lh-display: 48px;
+  --fs-h1: 30px;       --lh-h1: 38px;
+  --fs-h2: 24px;       --lh-h2: 32px;
+  --fs-h3: 20px;       --lh-h3: 28px;
+  --fs-title: 18px;    --lh-title: 26px;
+  --fs-body: 14px;     --lh-body: 21px;
+  --fs-small: 13px;    --lh-small: 20px;
+  --fs-caption: 12px;  --lh-caption: 16px;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+  --tracking-tight: -0.01em;   /* solo en display/H1 */
+
+  /* ---- Espaciado (escala 4) ---- */
+  --sp-xs: 4px; --sp-sm: 8px; --sp-md: 12px; --sp-lg: 16px;
+  --sp-xl: 24px; --sp-2xl: 32px; --sp-3xl: 48px; --sp-4xl: 64px;
+
+  /* ---- Radios ---- */
+  --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-2xl: 20px;
+
+  /* ---- Elevación (mínima; el dark usa capas + borde antes que sombra) ---- */
+  --el-card:     0 2px 4px rgba(0,0,0,.18);
+  --el-dropdown: 0 8px 24px rgba(0,0,0,.25);
+  --el-modal:    0 20px 60px rgba(0,0,0,.35);
+
+  /* ---- Movimiento (aclara la interacción, no entretiene) ---- */
+  --t-fast: 120ms; --t-normal: 180ms; --t-slow: 250ms;
+  --ease: cubic-bezier(.2,.8,.2,1);
+
+  /* ---- Breakpoints (referencia) ---- */
+  --bp-sm: 640px; --bp-md: 768px; --bp-lg: 1024px; --bp-xl: 1280px;
+}
+
+/* ============================================================================
+   TEMAS · superficies conmutables (dark / light)
+   Paleta oscura tipo Figma solicitada por el cliente.
+   Los acentos (violeta/semánticos) y la tipografía NO cambian entre temas.
+   ============================================================================ */
+:root,
+:root[data-theme="dark"] {
+  --canvas:  #1E1E1E;   /* lienzo + paneles */
+  --raised:  #2C2C2C;   /* toolbar, sidebar, cards, flotantes */
+  --inset:   #242424;   /* recesos dentro de cards */
+  --hover:   #383838;
+  --pressed: #424242;
+  --float:   #2C2C2C;
+  --line:    #444444;   /* bordes y líneas */
+  --line-2:  #565656;
+  --tx:        #F1F3F4; --tx-sec: #B4B7BA; --tx-muted: #8A8F94; --tx-dis: #5A5F64;
+  --glass:   rgba(44,44,44,.82);
+}
+:root[data-theme="light"] {
+  --canvas:  #F5F5F5;
+  --raised:  #FFFFFF;
+  --inset:   #F0F1F2;
+  --hover:   #ECECEC;
+  --pressed: #E3E3E3;
+  --float:   #FFFFFF;
+  --line:    #E4E4E4;
+  --line-2:  #D6D6D6;
+  --tx:        #1A1D1F; --tx-sec: #45494E; --tx-muted: #727880; --tx-dis: #AEB3B9;
+  --glass:   rgba(255,255,255,.82);
+}
