@@ -1,0 +1,273 @@
+@import 'tailwindcss';
+
+/* ============================================================================
+   ATLAS · tokens. Portados de design-tokens.css e index.html (ADR-001 §6.1).
+   Dark-first. El acento es violeta; el color comunica, no decora.
+   ========================================================================== */
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg-base: var(--canvas);
+  --color-bg-sec: var(--raised);
+  --color-bg-ter: var(--inset);
+
+  --color-surf: var(--raised);
+  --color-surf-hover: var(--hover);
+  --color-surf-pressed: var(--pressed);
+  --color-surf-float: var(--float);
+
+  --color-brand-500: #7c4dff;
+  --color-brand-600: #6d3ef2;
+  --color-brand-700: #5b2fd6;
+
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+  --color-success: #22c55e;
+  --color-info: #3b82f6;
+  --color-onbrand: #ffffff;
+
+  --color-tx: var(--tx);
+  --color-tx-sec: var(--tx-sec);
+  --color-tx-muted: var(--tx-muted);
+  --color-tx-dis: var(--tx-dis);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+
+  --ease-atlas: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Tema oscuro (por defecto) */
+:root {
+  --canvas: #1e1e1e;
+  --raised: #2c2c2c;
+  --inset: #242424;
+  --hover: #383838;
+  --pressed: #424242;
+  --float: #2c2c2c;
+  --line: #444444;
+  --line-2: #565656;
+  --tx: #f1f3f4;
+  --tx-sec: #b4b7ba;
+  --tx-muted: #8a8f94;
+  --tx-dis: #5a5f64;
+  --glass: rgba(44, 44, 44, 0.82);
+  --sk-1: #242424;
+  --sk-2: #333333;
+  --sb-thumb: #4a4a4a;
+
+  /* Elevación Material, reforzada porque el negro no se ve sobre #1E1E1E. */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.34), 0 1px 3px rgba(0, 0, 0, 0.28);
+  --elev-2: 0 2px 4px rgba(0, 0, 0, 0.4), 0 1px 6px rgba(0, 0, 0, 0.3);
+  --elev-4: 0 5px 10px rgba(0, 0, 0, 0.48), 0 2px 6px rgba(0, 0, 0, 0.34);
+  --elev-8: 0 10px 22px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='light'] {
+  --canvas: #f5f5f5;
+  --raised: #ffffff;
+  --inset: #f0f1f2;
+  --hover: #ececec;
+  --pressed: #e3e3e3;
+  --float: #ffffff;
+  --line: #e4e4e4;
+  --line-2: #d6d6d6;
+  --tx: #1a1d1f;
+  --tx-sec: #45494e;
+  --tx-muted: #727880;
+  --tx-dis: #aeb3b9;
+  --glass: rgba(255, 255, 255, 0.82);
+  --sk-1: #ececec;
+  --sk-2: #f6f6f6;
+  --sb-thumb: #cfcfcf;
+
+  --elev-1: 0 1px 1px rgba(0, 0, 0, 0.14), 0 2px 1px -1px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --elev-2: 0 2px 2px rgba(0, 0, 0, 0.14), 0 3px 1px -2px rgba(0, 0, 0, 0.12), 0 1px 5px rgba(0, 0, 0, 0.2);
+  --elev-4: 0 4px 5px rgba(0, 0, 0, 0.14), 0 1px 10px rgba(0, 0, 0, 0.12), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --elev-8: 0 8px 10px 1px rgba(0, 0, 0, 0.14), 0 3px 14px 2px rgba(0, 0, 0, 0.12), 0 5px 5px -3px rgba(0, 0, 0, 0.2);
+}
+
+* {
+  border-color: var(--line);
+}
+
+body {
+  background: var(--canvas);
+  color: var(--tx);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 21px;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(124, 77, 255, 0.28);
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb);
+  border-radius: 999px;
+  border: 3px solid var(--canvas);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Transición solo mientras se conmuta el tema, para que no arrastre en cada hover. */
+html.theming,
+html.theming * {
+  transition:
+    background-color 0.45s ease,
+    border-color 0.45s ease,
+    color 0.3s ease,
+    fill 0.3s ease !important;
+}
+
+@utility hair {
+  border: 1px solid var(--line);
+}
+@utility hair-t {
+  border-top: 1px solid var(--line);
+}
+@utility hair-b {
+  border-bottom: 1px solid var(--line);
+}
+@utility glass {
+  background: var(--glass);
+}
+
+/* Sombra + borde hairline: los docs Atlas evitan sombras decorativas. */
+@utility md-raise {
+  box-shadow: var(--elev-2);
+  transition: box-shadow 0.18s var(--ease-atlas);
+  &:hover {
+    box-shadow: var(--elev-4);
+  }
+}
+
+.card {
+  box-shadow: var(--elev-1);
+  transition:
+    box-shadow 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 0.18s ease,
+    transform 0.18s ease;
+}
+button.card:hover,
+a.card:hover {
+  box-shadow: var(--elev-4);
+}
+
+.sk {
+  background: linear-gradient(90deg, var(--sk-1) 25%, var(--sk-2) 37%, var(--sk-1) 63%);
+  background-size: 400% 100%;
+  animation: sk 1.4s ease infinite;
+}
+@keyframes sk {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.pop {
+  animation: pop 0.2s var(--ease-atlas);
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.up {
+  animation: up 0.22s var(--ease-atlas);
+}
+@keyframes up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #7c4dff;
+  outline-offset: 2px;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+kbd {
+  font-size: 11px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 6px;
+  color: var(--tx-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Toggle sol/luna: el CSS decide cuál se ve, sin estado en React. */
+.theme-btn {
+  overflow: hidden;
+}
+.theme-ic {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition:
+    transform 0.55s var(--ease-atlas),
+    opacity 0.35s ease;
+}
+.theme-ic.moon {
+  opacity: 1;
+  transform: rotate(0) scale(1);
+}
+.theme-ic.sun {
+  opacity: 0;
+  transform: rotate(-120deg) scale(0.3);
+}
+[data-theme='light'] .theme-ic.moon {
+  opacity: 0;
+  transform: rotate(120deg) scale(0.3);
+}
+[data-theme='light'] .theme-ic.sun {
+  opacity: 1;
+  transform: rotate(0) scale(1);
+}

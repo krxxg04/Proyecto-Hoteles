@@ -37,3 +37,7 @@ desktop.ini
 *.mov
 *.avi
 *.mkv
+
+# Notas de credenciales sueltas (los valores viven en .env.local)
+Credentials.md
+credentials*.md

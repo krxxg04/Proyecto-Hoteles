@@ -1,0 +1,26 @@
+{
+  "name": "Hostal Inteligente",
+  "short_name": "Hostal",
+  "description": "Gestión de hostales con IA",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1E1E1E",
+  "theme_color": "#1E1E1E",
+  "lang": "es-PE",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Nuevo check-in", "url": "/checkin", "icons": [{ "src": "/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Habitaciones", "url": "/habitaciones", "icons": [{ "src": "/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Asistente", "url": "/asistente", "icons": [{ "src": "/icono-192.png", "sizes": "192x192" }] }
+  ]
+}
