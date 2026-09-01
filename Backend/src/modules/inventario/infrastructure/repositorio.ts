@@ -1,7 +1,7 @@
 import { clienteServidor } from '@/shared/supabase/servidor';
 
 export const CAMPOS =
-  'id, nombre, icono, unidad, stock, stock_max, categoria, clase, precio, activo';
+  'id, nombre, icono, unidad, stock, stock_max, stock_min, categoria, clase, precio, activo';
 
 export async function buscarProductos(soloVendibles: boolean) {
   const supabase = await clienteServidor();

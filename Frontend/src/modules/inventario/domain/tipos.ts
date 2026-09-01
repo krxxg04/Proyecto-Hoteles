@@ -5,6 +5,8 @@ export type Producto = {
   unidad: string;
   stock: number;
   stock_max: number;
+  /** Avisar cuando el stock baje de aquí. 0 = sin aviso. */
+  stock_min: number;
   categoria: 'insumo' | 'vendible';
   clase: 'descartable' | 'no_descartable';
   precio: number;
@@ -14,6 +16,8 @@ export type Producto = {
   /** Días de cobertura según el consumo real de los últimos 14 días. */
   dias: number | null;
   semaforo: 'danger' | 'warning' | 'success';
+  /** Tocó o bajó del mínimo. Es lo que dispara la alerta. */
+  bajoMinimo: boolean;
 };
 
 export type PendienteAseo = {

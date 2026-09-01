@@ -186,7 +186,7 @@ export function VistaAsistente({ rol }: { rol: Rol }) {
 
           <div className="mt-5 flex flex-wrap gap-2">
             {SUGERENCIAS[rol].map((s) => (
-              <button
+              <button type="button"
                 key={s}
                 onClick={() => enviar(s)}
                 className="rounded-full bg-bg-ter hair px-3.5 py-2 text-[12.5px] text-tx-sec transition-colors hover:bg-surf-hover hover:text-tx cursor-pointer"

@@ -14,10 +14,13 @@ import {
 import { CambioEstadoSchema, CuartoSchema } from '../domain/esquemas';
 import * as repo from '../infrastructure/repositorio';
 
-export async function listarCuartos(estado?: EstadoCuarto): Promise<Resultado<CuartoConTipo[]>> {
+export async function listarCuartos(
+  estado?: EstadoCuarto,
+  incluirInactivos = false
+): Promise<Resultado<CuartoConTipo[]>> {
   await exigirSesion();
 
-  const { data, error } = await repo.buscarCuartos(estado);
+  const { data, error } = await repo.buscarCuartos(estado, incluirInactivos);
   if (error) return fallo(traducirError(error));
 
   // Supabase infiere las relaciones como arreglo aunque sean 1:1; se normalizan las dos formas.
@@ -149,4 +152,15 @@ export async function listarCaracteristicas() {
   const { data, error } = await repo.buscarCaracteristicas();
   if (error) return fallo(traducirError(error));
   return exito(data ?? []);
+}
+
+/** Volver a poner en servicio un cuarto dado de baja. Entra como «Disponible». */
+export async function habilitarCuarto(id: string): Promise<Resultado<null>> {
+  await exigirRol(...ROLES_ADMIN);
+
+  const { error } = await repo.habilitarCuarto(id);
+  if (error) return fallo(traducirError(error));
+
+  revalidatePath('/cuartos');
+  return exito(null);
 }

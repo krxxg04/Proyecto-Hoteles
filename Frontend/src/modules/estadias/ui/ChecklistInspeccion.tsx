@@ -139,7 +139,7 @@ export function ChecklistInspeccion({
                 {plantilla.estadia_id ? 'Tras el check-out' : 'Sin estadía asociada'}
               </p>
             </div>
-            <button
+            <button type="button"
               onClick={onCerrar}
               className="ml-auto grid size-8 place-items-center rounded-md text-tx-muted transition-colors hover:bg-surf-hover hover:text-tx cursor-pointer"
               aria-label="Elegir otra habitación"

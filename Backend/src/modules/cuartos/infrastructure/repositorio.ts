@@ -5,15 +5,15 @@ import type { ModoEstadia } from '@/modules/estadias/domain/tipos';
 export const CAMPOS =
   'id, numero, tipo_id, estado, nota, aforo, caracteristicas, tarifa_costo, tarifa_amanecida, activo';
 
-export async function buscarCuartos(estado?: EstadoCuarto) {
+export async function buscarCuartos(estado?: EstadoCuarto, incluirInactivos = false) {
   const supabase = await clienteServidor();
 
   let query = supabase
     .from('cuartos')
     .select(`${CAMPOS}, tipos_cuarto(nombre)`)
-    .eq('activo', true)
     .order('numero');
 
+  if (!incluirInactivos) query = query.eq('activo', true);
   if (estado) query = query.eq('estado', estado);
   return query;
 }
@@ -110,9 +110,22 @@ export async function sugerir(personas: number, caracteristicas: string[]) {
   });
 }
 
-export async function buscarTiposCuarto() {
+export async function buscarTiposCuarto(incluirInactivos = false) {
   const supabase = await clienteServidor();
-  return supabase.from('tipos_cuarto').select('*').eq('activo', true).order('nombre');
+  const query = supabase.from('tipos_cuarto').select('*').order('nombre');
+  return incluirInactivos ? query : query.eq('activo', true);
+}
+
+export async function cambiarActivoTipo(id: string, activo: boolean) {
+  const supabase = await clienteServidor();
+  return supabase.rpc(activo ? 'habilitar_tipo_cuarto' : 'inhabilitar_tipo_cuarto', {
+    p_tipo_id: id,
+  });
+}
+
+export async function habilitarCuarto(id: string) {
+  const supabase = await clienteServidor();
+  return supabase.rpc('habilitar_cuarto', { p_cuarto_id: id });
 }
 
 export async function guardarTipo(valores: object, tenantId: string, id?: string) {

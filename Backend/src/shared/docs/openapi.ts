@@ -643,6 +643,78 @@ export const documentoOpenAPI = {
         }),
         responses: respuesta('Estado cambiado.', { type: 'null' }),
       },
+      put: {
+        tags: ['Cuartos'],
+        summary: 'Guardar un tipo de cuarto (el tarifario)',
+        description: 'Solo administrador. Con `id` edita; sin `id` crea. Es lo que cobra el próximo check-in.',
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: {
+            id: { ...Uuid, description: 'Ausente para crear.' },
+            nombre: { type: 'string', minLength: 2, maxLength: 80 },
+            aforo: { type: 'integer', minimum: 1, maximum: 12 },
+            costo: { ...Dinero, minimum: 0 },
+            horas_lj: { type: 'integer', minimum: 1, maximum: 24 },
+            horas_vd: { type: 'integer', minimum: 1, maximum: 24 },
+            hora_extra: { ...Dinero, minimum: 0 },
+            amanecida: { ...Dinero, minimum: 0 },
+            amanecida_vd: { ...Dinero, minimum: 0 },
+            deposito: { ...Dinero, minimum: 0 },
+          },
+          required: ['nombre', 'aforo', 'costo', 'horas_lj', 'horas_vd'],
+          example: { nombre: 'Matrimonial', aforo: 2, costo: 50, horas_lj: 6, horas_vd: 4, amanecida: 120 },
+        }),
+        responses: respuesta('Tipo guardado.', { type: 'object' }),
+      },
+      post: {
+        tags: ['Cuartos'],
+        summary: 'Dar de alta o editar una habitación',
+        description:
+          'Solo administrador. Con `id` edita; sin `id` crea. El estado no viaja aquí: lo mueve `PATCH`, que lo audita. Un cuarto nuevo nace en `libre`.',
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: {
+            id: { ...Uuid, description: 'Ausente para crear.' },
+            numero: { type: 'string', minLength: 1, maxLength: 10 },
+            tipo_id: Uuid,
+            aforo: { type: 'integer', minimum: 1, maximum: 12 },
+            caracteristicas: { type: 'array', items: { type: 'string' } },
+            nota: { type: 'string', maxLength: 300 },
+            tarifa_costo: {
+              ...Dinero,
+              nullable: true,
+              description: 'Tarifa propia del cuarto. Null usa la del tipo.',
+            },
+            tarifa_amanecida: { ...Dinero, nullable: true, description: 'Null usa la del tipo.' },
+          },
+          required: ['numero', 'tipo_id', 'aforo'],
+          example: { numero: '302', tipo_id: '00000000-0000-0000-0000-000000000000', aforo: 2, caracteristicas: ['tv', 'wifi'] },
+        }),
+        responses: respuesta('Cuarto guardado.', { $ref: '#/components/schemas/Cuarto' }),
+      },
+      delete: {
+        tags: ['Cuartos'],
+        summary: 'Inhabilitar o volver a habilitar un cuarto o un tipo de cuarto',
+        description: [
+          'Nada se borra: hay estadías, ventas y auditoría apuntando detrás. Solo administrador.',
+          '',
+          '| Cuerpo | Qué hace |',
+          '|---|---|',
+          '| `{ id }` | inhabilita el cuarto; se niega si tiene una estadía activa |',
+          '| `{ id, activo: true }` | lo devuelve al servicio como `libre`; se niega si su tipo está inhabilitado |',
+          '| `{ tipo_id }` | inhabilita el tipo; se niega si todavía lo usan cuartos activos |',
+          '| `{ tipo_id, activo: true }` | lo devuelve al tarifario |',
+        ].join('\n'),
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: {
+            id: { ...Uuid, description: 'El cuarto. Excluyente con `tipo_id`.' },
+            tipo_id: { ...Uuid, description: 'El tipo de cuarto. Excluyente con `id`.' },
+            activo: { type: 'boolean', default: false, description: '`true` vuelve a habilitar.' },
+          },
+        }),
+        responses: respuesta('Hecho.', { type: 'null' }),
+      },
     },
 
     '/api/productos': {
@@ -665,15 +737,23 @@ export const documentoOpenAPI = {
       },
       post: {
         tags: ['Inventario'],
-        summary: 'Dar de alta un producto',
-        description: 'Solo administrador. El stock nace en 0 y solo se mueve con movimientos registrados.',
+        summary: 'Dar de alta o editar un producto',
+        description:
+          'Solo administrador. Con `id` edita; sin `id` crea. El stock nunca viaja aquí: nace en 0 y solo se mueve con movimientos registrados.',
         requestBody: cuerpoJson({
           type: 'object',
           properties: {
+            id: { ...Uuid, description: 'Ausente para crear.' },
             nombre: { type: 'string', minLength: 2, maxLength: 120 },
             icono: { type: 'string', maxLength: 40, default: 'package' },
             unidad: { type: 'string', maxLength: 20, description: 'unid., rollos, juegos...' },
             stock_max: { type: 'number', exclusiveMinimum: 0 },
+            stock_min: {
+              type: 'number',
+              minimum: 0,
+              default: 0,
+              description: 'Avisar cuando el stock baje de aquí. 0 = sin aviso. Menor que `stock_max`.',
+            },
             categoria: { type: 'string', enum: [...CATEGORIAS_PRODUCTO] },
             clase: { type: 'string', enum: [...CLASES_PRODUCTO] },
             precio: { ...Dinero, minimum: 0, description: 'Obligatorio (> 0) si es `vendible`.' },
@@ -684,12 +764,24 @@ export const documentoOpenAPI = {
             icono: 'cup-soda',
             unidad: 'unid.',
             stock_max: 48,
+            stock_min: 12,
             categoria: 'vendible',
             clase: 'descartable',
             precio: 3,
           },
         }),
-        responses: respuesta('Producto creado.', { $ref: '#/components/schemas/Producto' }),
+        responses: respuesta('Producto guardado.', { $ref: '#/components/schemas/Producto' }),
+      },
+      delete: {
+        tags: ['Inventario'],
+        summary: 'Dar de baja un producto',
+        description: 'Baja lógica: el kardex y las ventas siguen apuntando al producto.',
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: { id: Uuid },
+          required: ['id'],
+        }),
+        responses: respuesta('Producto dado de baja.', { type: 'null' }),
       },
     },
 
@@ -1362,7 +1454,7 @@ export const documentoOpenAPI = {
           checkinsHoy: { type: 'integer' },
           checkoutsHoy: { type: 'integer' },
           incidenciasAbiertas: { type: 'integer' },
-          stockCritico: { type: 'integer', description: 'Productos por debajo del 25%.' },
+          stockCritico: { type: 'integer', description: 'Productos que tocaron su stock mínimo.' },
           series: {
             type: 'object',
             description:

@@ -1,3 +1,13 @@
+export type ProductoEnAviso = {
+  nombre: string;
+  dias: number | null;
+  nivel: number;
+  unidad: string;
+  stock: number;
+  stock_min: number;
+  bajoMinimo: boolean;
+};
+
 /** Una barra de las dos listas de «Consumo del hostal». */
 export type LineaConsumo = { nombre: string; cantidad: number; unidad?: string };
 
@@ -37,7 +47,9 @@ export type ResumenPanel = {
    * que nadie ha sacado nada sigue siendo el más urgente, aunque no se pueda decir
    * cuánto dura. Saltárselo por falta de histórico era esconder justo lo que importa.
    */
-  porAcabarse: { nombre: string; dias: number | null; nivel: number } | null;
+  porAcabarse: ProductoEnAviso | null;
+  /** Los que ya tocaron su mínimo, del más corto de stock al menos. */
+  bajoMinimo: ProductoEnAviso[];
 };
 
 export type IngresoDiario = { fecha: string; total: number; operaciones: number };

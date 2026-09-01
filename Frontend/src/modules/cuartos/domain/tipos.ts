@@ -52,3 +52,6 @@ export type DetalleCuarto = Cuarto & {
     nombre_contacto: string | null;
   } | null;
 };
+
+/** Las características que ofrece el hostal, para los chips del formulario de cuarto. */
+export type Caracteristica = { clave: string; label: string; icono: string };

@@ -6,6 +6,7 @@ import { Search, ChevronRight, X } from 'lucide-react';
 import type { Huesped } from '../domain/tipos';
 import { Chip, Vacio } from '@/shared/ui/primitivos';
 import { Celda, EncabezadoSeccion, Fila, Tabla } from '@/shared/ui/tabla';
+import { fechaCorta } from '@/shared/ui/fechas';
 
 /**
  * Registro de personas. El estado va como columna líder, según los docs Atlas.
@@ -66,11 +67,7 @@ export function VistaHuespedes({ huespedes, busqueda }: { huespedes: Huesped[]; 
                 {h.telefono ?? '—'}
               </Celda>
               <Celda className="text-tx-muted" oculta="md">
-                {new Date(h.created_at).toLocaleDateString('es-PE', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
+                {fechaCorta(h.created_at)}
               </Celda>
               <Celda className="text-right">
                 <ChevronRight className="inline size-4 text-tx-muted" />
@@ -98,7 +95,7 @@ export function VistaHuespedes({ huespedes, busqueda }: { huespedes: Huesped[]; 
                   {abierto.tipo_doc} {abierto.num_doc}
                 </p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setAbierto(null)}
                 aria-label="Cerrar"
                 className="grid size-8 place-items-center rounded-md text-tx-muted hover:bg-surf-hover hover:text-tx cursor-pointer"

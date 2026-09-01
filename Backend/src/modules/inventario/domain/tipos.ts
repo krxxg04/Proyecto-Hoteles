@@ -17,6 +17,8 @@ export type Producto = {
   unidad: string;
   stock: number;
   stock_max: number;
+  /** Avisar cuando el stock baje de aquí. 0 = sin aviso. */
+  stock_min: number;
   categoria: CategoriaProducto;
   clase: ClaseProducto;
   precio: number;
@@ -29,4 +31,6 @@ export type ProductoConCobertura = Producto & {
   /** Días estimados de cobertura, según el consumo real de los últimos 14 días. */
   dias: number | null;
   semaforo: 'danger' | 'warning' | 'success';
+  /** El stock tocó o bajó del mínimo configurado. Es lo que dispara la alerta. */
+  bajoMinimo: boolean;
 };

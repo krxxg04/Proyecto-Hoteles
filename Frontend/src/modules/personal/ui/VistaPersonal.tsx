@@ -56,7 +56,7 @@ export function VistaPersonal({ personal }: { personal: Perfil[] }) {
             </Celda>
             <Celda className="text-right">
               {p.activo && (
-                <button
+                <button type="button"
                   onClick={() => darDeBaja(p)}
                   disabled={ocupado}
                   aria-label={`Dar de baja a ${p.nombre}`}

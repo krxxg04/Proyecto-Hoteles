@@ -46,10 +46,15 @@ export function Chip({
   );
 }
 
+/**
+ * Dentro de un formulario, un botón sin `type` es `submit` y lo envía sin querer.
+ * Por eso el defecto es `button` y quien quiera enviar lo pide con `type="submit"`.
+ */
 export function Boton({
   children,
   variante = 'secundario',
   className = '',
+  type = 'button',
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;
@@ -64,6 +69,9 @@ export function Boton({
 
   return (
     <button
+      // La regla no ve que `type` ya viene con `'button'` por defecto, arriba.
+      // eslint-disable-next-line react/button-has-type
+      type={type}
       {...props}
       className={`inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-[13px] font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${estilos} ${className}`}
     >
@@ -104,6 +112,7 @@ export function Pildora({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-pressed={activa}
       className={`rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors cursor-pointer ${

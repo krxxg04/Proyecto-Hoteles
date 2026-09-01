@@ -38,7 +38,7 @@ Y en `Backend/package.json`, todos con `--env-file=.env.local` ya puesto:
 |---|---|
 | `npm run migrar` | Aplica lo pendiente de `Database/` |
 | `npm run migrar:estado` | Solo informa: qué hay aplicado, qué falta, qué se alteró |
-| `npm run prueba:aislamiento` | **El gate.** 74 comprobaciones; sale con código 1 si falla |
+| `npm run prueba:aislamiento` | **El gate.** 83 comprobaciones; sale con código 1 si falla |
 | `npm run seed -- --slug aurora` | Los datos del prototipo (`--limpiar` borra y recarga) |
 | `npm run bootstrap -- ...` | Alta de un hostal nuevo con su primer administrador |
 | `npm run purgar:medios` | Borra las fotos vencidas (`--simular` para ver qué se iría) |
@@ -107,7 +107,7 @@ Frontend/src/
                inventario · medios · personal · reportes · reservas
   shared/      api/ (contrato HTTP) · ui/ (Chasis, Paleta, primitivos, guardia,
                navegacion, useEnVivo) · supabase/navegador.ts (solo Realtime)
-  app/(app)/   las rutas con sesión; `(app)` es un route group, no sale en la URL
+  app/(sesion)/ las rutas que exigen sesión; los paréntesis lo hacen route group
   app/login/   fuera del grupo: no puede exigir sesión quien va a iniciarla
 Frontend/scripts/
   iconos.mjs   genera los PNG del manifiesto desde icono.svg (usa sharp, que ya trae Next)
@@ -165,6 +165,8 @@ npm run migrar            # aplica lo pendiente
 | 7 | `07_medios_en_inspecciones.sql` | Enlaza la foto de inspección con `medios` |
 | 8 | `08_acciones_por_rol.sql` | Estados de cuarto y compras, según quién los toca |
 | 9 | `09_esperado_no_negativo.sql` | El conteo de cierre no puede esperar menos de cero |
+| 10 | `10_stock_minimo_y_bajas.sql` | `productos.stock_min`, bajas reversibles de cuartos y tipos, catálogo solo para administración |
+| 11 | `11_cuartos_solo_el_estado.sql` | Quien no es administración solo mueve el estado de un cuarto, no sus datos |
 
 Las cuatro primeras están marcadas como *baseline*: ya estaban aplicadas a mano cuando se adoptó el runner, así que se registraron sin volver a ejecutarlas.
 
@@ -217,6 +219,11 @@ Dos decisiones al portar, por si chocan con el prototipo:
 | Solo hay minigráfica donde hay histórico | `Sparkline.tsx` | El mockup dibujaba cuatro con datos inventados. Una gráfica sin datos detrás no informa, decora |
 | `--limpiar` también borra el historial de turnos | `seed.mjs` | Guardar conteos que hablan de productos recién borrados deja un registro que miente |
 | Los nombres del menú son los del mockup | `navegacion.ts` | «Cuartos» y «Personas», no «Cuartos y tarifas» ni «Personal». Se pidió paridad estricta |
+| El aviso de stock es un **mínimo por producto**, no un % del máximo | `10_stock_minimo_y_bajas.sql` | Un 25 % de 120 rollos y un 25 % de 60 sábanas son avisos muy distintos. Quien lleva el hostal sabe con cuánto le da tiempo a reponer |
+| Cuartos y tipos **se inhabilitan, no se borran** | `10_stock_minimo_y_bajas.sql` | Hay estadías cobradas, ventas y auditoría apuntando. Y la baja tiene vuelta: `activo` existía y nadie lo devolvía a `true` |
+| El **estado** de un cuarto no se edita desde `/admin/cuartos` | `VistaCuartosAdmin` | Lo mueve `cambiar_estado_cuarto()`, que audita quién fue y corta por rol. Editarlo ahí sería un `UPDATE` sin registro |
+| Las fechas se formatean a mano, no con `toLocaleString` | `shared/ui/fechas.ts` | El ICU de Node y el del navegador no ponen el mismo espacio duro, y sin `timeZone` el servidor de producción formatea en UTC: cinco horas de diferencia |
+| `Boton` y `Pildora` son `type="button"` por defecto | `primitivos.tsx` | Dentro de un `<form>`, un botón sin `type` es `submit`. Siete controles enviaban el formulario al hacer clic |
 
 ---
 
@@ -226,7 +233,7 @@ Dos decisiones al portar, por si chocan con el prototipo:
 cd Backend && npm run prueba:aislamiento
 ```
 
-**74 comprobaciones. Pasa.** Crea un segundo hostal desechable, lo llena con datos en **las 24 tablas con `tenant_id`**, entra como administrador de cada uno con la clave pública (el mismo camino que la app) e intenta cruzar la línea:
+**83 comprobaciones. Pasa.** Crea un segundo hostal desechable, lo llena con datos en **las 24 tablas con `tenant_id`**, entra como administrador de cada uno con la clave pública (el mismo camino que la app) e intenta cruzar la línea:
 
 | Bloque | Qué comprueba |
 |---|---|
@@ -236,7 +243,7 @@ cd Backend && npm run prueba:aislamiento
 | 3 · Escritura | UPDATE, INSERT con `tenant_id` ajeno, DELETE, y **mudar una fila propia al otro hostal** (el `WITH CHECK`) |
 | 4 · Funciones | `cambiar_estado_cuarto()` y `registrar_venta()` sobre datos del otro |
 | 5 · Sin sesión | `anon` no lee ninguna tabla ni ejecuta ninguna función — salvo `resolver_login`, que es el propio login |
-| 6 · Roles | Limpieza no ve caja, turnos, huéspedes ni auditoría, no toca el tarifario, **no puede ascenderse sola**, no pone un cuarto en `ocupada` ni registra compras — y tampoco esquivándolo con un UPDATE directo |
+| 6 · Roles | Limpieza no ve caja, turnos, huéspedes ni auditoría, no toca el tarifario, **no puede ascenderse sola**, no pone un cuarto en `ocupada` ni registra compras, **no crea ni borra cuartos ni productos, no les cambia el precio ni el stock mínimo, y no inhabilita nada** — y tampoco esquivándolo con un UPDATE directo |
 | 7 · Realtime | El socket también filtra por hostal, y sin sesión no entrega ninguna fila |
 | 8 · Auditoría | Distingue lo que escribió el asistente de lo que escribió una persona |
 
@@ -244,13 +251,32 @@ cd Backend && npm run prueba:aislamiento
 
 ### Lo que encontró
 
+**El catálogo estaba abierto a cualquiera con sesión.** `aplicar_rls('productos')` y
+`aplicar_rls('cuartos')` se aplicaron sin rol de escritura, así que limpieza podía crear,
+editar y borrar productos y cuartos yendo directo a PostgREST: la comprobación vivía solo
+en `exigirRol()` de TypeScript, y eso no es una regla. Cerrado en
+`10_stock_minimo_y_bajas.sql`.
+
+**Y `cuartos_upd` vigilaba el estado, no las columnas.** La policy de la 08 deja a limpieza
+mover un cuarto que ya está en un estado de piso — pero ese mismo `UPDATE` podía traer
+cualquier otra columna: `activo`, `numero`, `tipo_id` y, lo más caro, `tarifa_costo` y
+`tarifa_amanecida`. El RLS de Postgres no filtra por columna, y los GRANT por columna
+tampoco sirven porque todas las sesiones de la app son el mismo rol `authenticated`. Va en
+un trigger: `11_cuartos_solo_el_estado.sql`.
+
+Lo encontró **el propio gate al ampliarlo**, y solo porque la comprobación vuelve a leer la
+fila con `service_role` en vez de mirar si hubo error: en UPDATE y DELETE el RLS que no deja
+pasar una fila **no lanza error**, simplemente no afecta ninguna. Contar el error habría
+dado un falso verde.
+
+
 **`anon` podía ejecutar `current_tenant_id()`.** `01_schema.sql §12` hacía `revoke execute ... from anon`, pero Postgres otorga EXECUTE al rol `public` por defecto y `anon` hereda de `public`: revocarle algo que tiene por herencia no quita nada. No era una fuga —sin JWT la función devuelve null— pero el resto de las funciones de negocio quedaban igual de expuestas. Arreglado en `06_ejecucion_de_funciones.sql`, que revoca a `public`, otorga a `authenticated` y deja `resolver_login` como única excepción para `anon`.
 
 ### Los cuatro gates de `CLAUDE.md`
 
 | Gate | Estado |
 |---|---|
-| 1 · RLS activado y testeado, aislamiento cross-tenant | ✅ 74 comprobaciones |
+| 1 · RLS activado y testeado, aislamiento cross-tenant | ✅ 83 comprobaciones |
 | 2 · `service_role` nunca en el cliente | ✅ Solo en scripts de terminal. Al navegador solo va la clave pública, y la prueba confirma que sin JWT no sirve para nada |
 | 3 · Buckets R2 privados + URLs firmadas | ⚠️ Implementado, **sin ejecutar**: no hay cuenta de R2. Ver §9 |
 | 4 · Consentimiento, retención y borrado (Ley 29733) | ⚠️ Igual: el código está, el camino no se ha corrido |
@@ -349,6 +375,63 @@ Hasta ahora el rol solo decidía qué salía en el menú. Un menú no es una pue
 - Y como las dos funciones son `SECURITY DEFINER`, la policy `cuartos_upd` se rehízo para que un `UPDATE` directo tampoco pase.
 
 Lo comprueba el bloque 6 del gate, con la sesión real de una persona de limpieza.
+
+---
+
+## 6 bis. Lo que pidió el hostal
+
+### Alerta antes de que se acabe algo
+
+El aviso de reposición salía de **un 25 % del máximo fijado en el código**: el mismo umbral
+para 120 rollos de papel que para 60 sábanas. Ahora cada producto lleva su `stock_min`, y
+es quien maneja el hostal quien decide con cuánto todavía le da tiempo a comprar.
+
+- **Rojo** al tocar el mínimo; **ámbar** a partir de `mínimo × 1.5`, para que el aviso llegue
+  con margen y no el día que se acaba.
+- Sin mínimo configurado (0) se mantiene la regla vieja: un producto que nadie tocó no se
+  queda de golpe sin aviso.
+- Aparece en cuatro sitios: el semáforo de **Inventario** y su filtro *Por reponer*, el
+  resumen del **Panel**, una sección **Stock por reponer** en Alertas, y el punto rojo de la
+  campana, que ahora suma descuadres sin revisar + productos bajo mínimo.
+- Se edita en **Productos**, y solo el administrador puede: bajar un mínimo es la forma
+  silenciosa de apagar una alerta.
+
+La migración rellenó `stock_min` de los productos existentes con el 25 % que tenían de
+hecho, para que nadie viera cambiar sus alertas por haber corrido una migración.
+
+**El mínimo se elige contra el consumo, no contra el máximo.** El seed tenía el kit de aseo
+en 20 y se gasta ~2 cada 14 días: era pedir stock para 140 días, y la tarjeta salía en rojo
+diciendo «reponer» junto a «da para ~105 días» — la aplicación contradiciéndose en la misma
+línea. Bajado a 8. Y en la tarjeta de Alertas los días de cobertura solo se muestran si son
+30 o menos: manda el mínimo, que lo puso una persona, y una estimación que lo desmiente ahí
+no ayuda.
+
+### Nada se borra: se inhabilita, y vuelve
+
+Ni cuartos ni tipos de cuarto se borran de la base — hay estadías cobradas, ventas y
+auditoría apuntando a ellos. `activo` ya existía en las dos tablas y **nadie lo volvía a
+poner en `true`**: dar de baja era un camino de ida.
+
+- En `/admin/cuartos`, un botón de **inhabilitar** en cada cuarto y en cada tarjeta del
+  tarifario — icono de prohibido, no papelera: una papelera promete que borra, y esto no
+  borra. Al pie, una sección **Inhabilitados** con un botón *Habilitar* por fila.
+- **Un tipo no se inhabilita si todavía lo usan cuartos activos**: dejaría cuartos
+  apuntando a un tarifario que ya no se ofrece. Dice cuántos son.
+- **Un cuarto no vuelve si su tipo sigue inhabilitado**: no tendría tarifa que cobrar.
+  Vuelve como *Disponible*, nunca al estado en que se cayó.
+- Un cuarto con estadía activa no se puede dar de baja: primero el check-out.
+- Las tres reglas viven en SQL (`inhabilitar_tipo_cuarto`, `habilitar_tipo_cuarto`,
+  `habilitar_cuarto`), no en TypeScript, así que tampoco se saltan por PostgREST.
+
+### El administrador puede más, y se demuestra usándolo
+
+Se cerraron dos agujeros reales (§4) y se sumaron 9 comprobaciones al gate. La diferencia
+entre roles **se ve en el propio funcionamiento**: el menú de limpieza tiene 4 entradas, su
+vista de piso decide menos, el asistente le ofrece 5 acciones de 9, y las rutas y la API
+rechazan lo que no le toca.
+
+Hubo una tabla de capacidades en `/admin/personas` y **se quitó a pedido**: la prueba real es
+recorrer la app con cada rol, no un cuadro que hay que mantener al día a mano.
 
 ---
 
@@ -493,7 +576,9 @@ Tiene que responder que ese estado lo cambia recepción.
 
 `ADR-001 §3` deja claro que **las fotos son de todos los planes** (solo el video es premium), así que entran en el plan básico y las cubre el gate #3.
 
-**Implementado, nunca ejecutado.** No hay cuenta de R2: `GET /api/salud` responde `"medios": "sin configurar"` y `POST /api/medios` corta con un mensaje claro antes de tocar nada.
+**Implementado, nunca ejecutado.** No hay cuenta de R2: `GET /api/salud` responde `"medios": "sin configurar"` y `POST /api/medios` corta antes de tocar nada.
+
+Mientras no haya claves, el control de foto no se pinta (`CapturaFoto` consulta `/api/salud`): un botón que solo puede devolver el nombre de las variables que faltan no es algo que deba ver quien está en el mostrador. Con las claves puestas, reaparece solo.
 
 Cómo funciona:
 
@@ -511,7 +596,7 @@ Dónde se usa: foto de la inspección, y foto del documento en la pantalla de co
 
 ## 10. Superficie del backend
 
-**20 rutas** en `Backend/src/app/api/`. `GET /api/cuartos?id=` devuelve el detalle que llena el panel lateral. **Swagger en <http://localhost:3000/docs>** (404 en producción; se reabre con `HABILITAR_DOCS=1`).
+**20 rutas** en `Backend/src/app/api/`. `GET /api/cuartos?id=` devuelve el detalle que llena el panel lateral; `POST` da de alta o edita un cuarto y `DELETE` inhabilita o vuelve a habilitar cuartos y tipos. `POST /api/productos` con `id` edita. **Swagger en <http://localhost:3000/docs>** (404 en producción; se reabre con `HABILITAR_DOCS=1`).
 
 `salud` · `auth` · `asistente` · `panel` · `cuartos` · `productos` · `inventario` · `aseo` · `huespedes` · `checkin` · **`inspecciones`** · **`reservas`** · **`medios`** · **`catalogos`** · **`tarifa`** · `ventas` · `turno` · `incidencias` · `personal` · `openapi`
 
@@ -527,7 +612,7 @@ Las 19 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 |---|---|
 | Esquema Postgres completo | ✅ 27 tablas |
 | RLS por `tenant_id` en TODAS + políticas | ✅ 27/27 |
-| **Probar aislamiento cross-tenant** | ✅ 74 comprobaciones, §4 |
+| **Probar aislamiento cross-tenant** | ✅ 83 comprobaciones, §4 |
 | Supabase Auth DNI+PIN, 4 roles | ✅ |
 | Route Handlers tipados | ✅ 19 rutas |
 | `service_role` nunca en el cliente | ✅ |
@@ -575,7 +660,10 @@ Las 19 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 - **Los scripts de `Database/` se aplican con el runner, nunca a mano.** Editar una migración ya aplicada hace que `npm run migrar` se plante, que es lo que se quiere. Existe `--forzar` para reaplicarla; se usó **una vez**, sobre la 08, minutos después de crearla y con esta base como única que la tenía. Si ya está en otra máquina, la respuesta es una migración nueva, no `--forzar`.
 - **Supabase tipa las relaciones incrustadas como arreglo** aunque sean 1:1: `cuartos(numero)` devuelve `{ numero }` en ejecución pero el tipo dice `{ numero }[]`. Para eso está `shared/supabase/embebido.ts` con `uno()`. Normalizarlo a mano en cada consulta era ruido repetido en tres módulos.
 - **Realtime sin sesión entrega un sobre vacío, no silencio.** `anon` recibe el evento con `new` y `old` en `{}` y `errors: ["Error 401: Unauthorized"]` — el RLS le quitó todas las columnas. Al probar el aislamiento hay que comprobar **que no llegan filas**, no que no llegan mensajes: contar sobres da un falso positivo de fuga.
-- **`(app)` es un route group**, no un segmento de URL. `(app)/habitaciones` se sirve en `/habitaciones`. Está para que todo lo de dentro comparta el chasis y la exigencia de sesión, y `/login` quede fuera.
+- **En UPDATE y DELETE, el RLS que bloquea no lanza error**: simplemente no afecta ninguna fila. Para comprobar que algo quedó protegido hay que **volver a leer la fila** con `service_role`; mirar `error` da un falso verde. Es lo que escondía los dos agujeros de §4.
+- **Un `<button>` sin `type` dentro de un `<form>` es `submit`.** Lo vigila `react/button-has-type` en el eslint del front, activado a propósito: es un fallo que no se ve leyendo el código y que en Inventario cobraba una venta al elegir el medio de pago.
+- **`toLocaleString` rompe la hidratación** y, peor, formatea en la zona del servidor. Todo el formato de fechas pasa por `shared/ui/fechas.ts`, que fija `America/Lima` y arma el texto a mano. No volver a llamar a `toLocale*` en componentes.
+- **`(sesion)` es un route group**, no un segmento de URL: los paréntesis son lo que hace que no aparezca. `(sesion)/habitaciones` se sirve en `/habitaciones`. Está para que todo lo de dentro comparta el chasis y la exigencia de sesión, y `/login` quede fuera. Quitarle los paréntesis movería cada ruta a `/sesion/...`.
 
 ---
 

@@ -15,7 +15,7 @@ import { PuntoEnVivo } from '@/shared/ui/PuntoEnVivo';
 function TarjetaCuarto({ cuarto, onClick }: { cuarto: CuartoConTipo; onClick: () => void }) {
   const e = ESTILO_ESTADO[cuarto.estado];
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       className="card relative overflow-hidden rounded-xl bg-surf hair p-4 text-left transition-transform hover:-translate-y-0.5 hover:bg-surf-hover cursor-pointer"
     >

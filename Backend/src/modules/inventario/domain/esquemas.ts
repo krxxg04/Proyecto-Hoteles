@@ -7,6 +7,7 @@ export const ProductoSchema = z
     icono: z.string().trim().max(40).default('package'),
     unidad: z.string().trim().min(1, 'Indica la unidad (unid., rollos, juegos...)').max(20),
     stock_max: z.coerce.number().positive('El máximo debe ser mayor que cero'),
+    stock_min: z.coerce.number().min(0, 'El mínimo no puede ser negativo').default(0),
     categoria: z.enum(CATEGORIAS_PRODUCTO),
     clase: z.enum(CLASES_PRODUCTO),
     precio: z.coerce.number().min(0, 'El precio no puede ser negativo'),
@@ -14,6 +15,10 @@ export const ProductoSchema = z
   .refine((d) => d.categoria !== 'vendible' || d.precio > 0, {
     message: 'Un producto vendible necesita precio',
     path: ['precio'],
+  })
+  .refine((d) => d.stock_min < d.stock_max, {
+    message: 'El mínimo tiene que ser menor que el máximo',
+    path: ['stock_min'],
   });
 
 export const MovimientoSchema = z.object({

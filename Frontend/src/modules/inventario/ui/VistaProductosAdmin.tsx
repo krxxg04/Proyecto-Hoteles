@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, X } from 'lucide-react';
+import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { Producto } from '../domain/tipos';
-import { guardarProducto } from '../infrastructure/acciones';
+import { desactivarProducto, guardarProducto } from '../infrastructure/acciones';
 import { Boton, Campo, Chip, ErrorCaja, Pildora, soles } from '@/shared/ui/primitivos';
 import { Celda, EncabezadoSeccion, Fila, Tabla } from '@/shared/ui/tabla';
 
@@ -12,6 +12,18 @@ import { Celda, EncabezadoSeccion, Fila, Tabla } from '@/shared/ui/tabla';
 export function VistaProductosAdmin({ productos }: { productos: Producto[] }) {
   const router = useRouter();
   const [creando, setCreando] = useState(false);
+  const [editando, setEditando] = useState<Producto | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ocupado, empezar] = useTransition();
+
+  function darDeBaja(p: Producto) {
+    setError(null);
+    empezar(async () => {
+      const r = await desactivarProducto(p.id);
+      if (!r.ok) setError(r.error);
+      else router.refresh();
+    });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -26,7 +38,9 @@ export function VistaProductosAdmin({ productos }: { productos: Producto[] }) {
         }
       />
 
-      <Tabla columnas={['Producto', 'Categoría', 'Clase', 'Stock', 'Precio']}>
+      {error && <ErrorCaja mensaje={error} />}
+
+      <Tabla columnas={['Producto', 'Categoría', 'Clase', 'Stock', 'Avisar bajo', 'Precio', '']}>
         {productos.map((p) => (
           <Fila key={p.id}>
             <Celda className="font-medium">{p.nombre}</Celda>
@@ -47,8 +61,36 @@ export function VistaProductosAdmin({ productos }: { productos: Producto[] }) {
             <Celda className="tabular-nums text-tx-sec" oculta="sm">
               {p.stock} / {p.stock_max} {p.unidad}
             </Celda>
+            <Celda className="tabular-nums" oculta="sm">
+              {p.stock_min > 0 ? (
+                <span className={p.stock <= p.stock_min ? 'text-danger' : 'text-tx-sec'}>
+                  {p.stock_min} {p.unidad}
+                </span>
+              ) : (
+                <span className="text-tx-dis">sin aviso</span>
+              )}
+            </Celda>
             <Celda className="tabular-nums text-tx-sec">
               {p.categoria === 'vendible' ? soles(p.precio) : '—'}
+            </Celda>
+            <Celda className="text-right">
+              <div className="flex justify-end gap-1">
+                <button type="button"
+                  onClick={() => setEditando(p)}
+                  aria-label={`Editar ${p.nombre}`}
+                  className="grid size-8 cursor-pointer place-items-center rounded-md text-tx-muted hover:bg-surf-hover hover:text-tx"
+                >
+                  <Pencil className="size-4" />
+                </button>
+                <button type="button"
+                  onClick={() => darDeBaja(p)}
+                  disabled={ocupado}
+                  aria-label={`Dar de baja ${p.nombre}`}
+                  className="grid size-8 cursor-pointer place-items-center rounded-md text-tx-muted hover:bg-surf-hover hover:text-danger"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
             </Celda>
           </Fila>
         ))}
@@ -59,11 +101,16 @@ export function VistaProductosAdmin({ productos }: { productos: Producto[] }) {
         cierre cuadre contra algo real.
       </p>
 
-      {creando && (
+      {(creando || editando) && (
         <DialogoProducto
-          onCerrar={() => setCreando(false)}
+          producto={editando}
+          onCerrar={() => {
+            setCreando(false);
+            setEditando(null);
+          }}
           onHecho={() => {
             setCreando(false);
+            setEditando(null);
             router.refresh();
           }}
         />
@@ -72,13 +119,24 @@ export function VistaProductosAdmin({ productos }: { productos: Producto[] }) {
   );
 }
 
-function DialogoProducto({ onCerrar, onHecho }: { onCerrar: () => void; onHecho: () => void }) {
-  const [nombre, setNombre] = useState('');
-  const [unidad, setUnidad] = useState('unid.');
-  const [stockMax, setStockMax] = useState('50');
-  const [categoria, setCategoria] = useState<'insumo' | 'vendible'>('vendible');
-  const [clase, setClase] = useState<'descartable' | 'no_descartable'>('descartable');
-  const [precio, setPrecio] = useState('0');
+function DialogoProducto({
+  producto,
+  onCerrar,
+  onHecho,
+}: {
+  producto?: Producto | null;
+  onCerrar: () => void;
+  onHecho: () => void;
+}) {
+  const [nombre, setNombre] = useState(producto?.nombre ?? '');
+  const [unidad, setUnidad] = useState(producto?.unidad ?? 'unid.');
+  const [stockMax, setStockMax] = useState(String(producto?.stock_max ?? 50));
+  const [stockMin, setStockMin] = useState(String(producto?.stock_min ?? 0));
+  const [categoria, setCategoria] = useState<'insumo' | 'vendible'>(producto?.categoria ?? 'vendible');
+  const [clase, setClase] = useState<'descartable' | 'no_descartable'>(
+    producto?.clase ?? 'descartable'
+  );
+  const [precio, setPrecio] = useState(String(producto?.precio ?? 0));
   const [error, setError] = useState<string | null>(null);
   const [campo, setCampo] = useState<string | undefined>();
   const [enviando, empezar] = useTransition();
@@ -89,9 +147,11 @@ function DialogoProducto({ onCerrar, onHecho }: { onCerrar: () => void; onHecho:
 
     empezar(async () => {
       const r = await guardarProducto({
+        id: producto?.id,
         nombre,
         unidad,
         stock_max: Number(stockMax),
+        stock_min: Number(stockMin),
         categoria,
         clase,
         precio: Number(precio),
@@ -113,7 +173,7 @@ function DialogoProducto({ onCerrar, onHecho }: { onCerrar: () => void; onHecho:
         className="pop w-full max-w-sm rounded-xl bg-surf-float p-5 shadow-2xl"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <p className="text-[16px] font-semibold">Nuevo producto</p>
+          <p className="text-[16px] font-semibold">{producto ? `Editar ${producto.nombre}` : 'Nuevo producto'}</p>
           <button
             type="button"
             onClick={onCerrar}
@@ -142,6 +202,21 @@ function DialogoProducto({ onCerrar, onHecho }: { onCerrar: () => void; onHecho:
               value={stockMax}
               onChange={(e) => setStockMax(e.target.value)}
             />
+          </div>
+
+          <div className="rounded-lg bg-surf hair p-3">
+            <Campo
+              etiqueta="Avisar cuando queden menos de"
+              type="number"
+              min="0"
+              value={stockMin}
+              onChange={(e) => setStockMin(e.target.value)}
+              error={campo === 'stock_min' ? error ?? undefined : undefined}
+            />
+            <p className="mt-1.5 text-[12px] text-tx-muted">
+              Con cuánto todavía da tiempo a reponer. Sale en Alertas al llegar, y en ámbar un poco
+              antes. 0 = sin aviso.
+            </p>
           </div>
 
           <div>

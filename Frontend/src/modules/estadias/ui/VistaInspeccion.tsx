@@ -6,6 +6,7 @@ import type { CuartoConTipo } from '@/modules/cuartos/domain/tipos';
 import { ESTILO_ESTADO } from '@/modules/cuartos/ui/estados';
 import { ChecklistInspeccion } from './ChecklistInspeccion';
 import type { Inspeccion, PlantillaInspeccion } from '../domain/tipos';
+import { fechaYHora } from '@/shared/ui/fechas';
 
 /**
  * Inspección post check-out. Portada de `openInspeccion()` del prototipo.
@@ -15,15 +16,6 @@ import type { Inspeccion, PlantillaInspeccion } from '../domain/tipos';
  * inspección NO descuenta inventario: un faltante se registra aparte y con motivo,
  * y siempre lo decide una persona.
  */
-function fecha(iso: string) {
-  return new Date(iso).toLocaleString('es-PE', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 export function VistaInspeccion({
   cuartos,
   plantilla,
@@ -66,7 +58,7 @@ export function VistaInspeccion({
               {porRevisar.map((c) => {
                 const e = ESTILO_ESTADO[c.estado];
                 return (
-                  <button
+                  <button type="button"
                     key={c.id}
                     onClick={() => elegir(c.id)}
                     className="card relative overflow-hidden rounded-xl bg-surf hair p-4 text-left transition-transform hover:-translate-y-0.5 hover:bg-surf-hover cursor-pointer"
@@ -93,7 +85,7 @@ export function VistaInspeccion({
             </summary>
             <div className="mt-3 flex flex-wrap gap-2">
               {resto.map((c) => (
-                <button
+                <button type="button"
                   key={c.id}
                   onClick={() => elegir(c.id)}
                   className="rounded-md bg-bg-ter hair px-3 py-1.5 text-[13px] text-tx-sec transition-colors hover:bg-surf-hover hover:text-tx cursor-pointer"
@@ -117,7 +109,7 @@ export function VistaInspeccion({
                   <Card key={h.id} padding="p-3">
                     <div className="flex items-center gap-3">
                       <span className="text-[15px] font-semibold">{h.cuartos?.numero ?? '—'}</span>
-                      <span className="text-[12.5px] text-tx-muted">{fecha(h.created_at)}</span>
+                      <span className="text-[12.5px] text-tx-muted">{fechaYHora(h.created_at)}</span>
                       <div className="ml-auto">
                         {faltan > 0 ? (
                           <Chip tono="warning">

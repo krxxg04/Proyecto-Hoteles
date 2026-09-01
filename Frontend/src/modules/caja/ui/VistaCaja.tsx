@@ -8,6 +8,7 @@ import { abrirTurno, cerrarTurno, conteoEsperado } from '../infrastructure/accio
 import { ETIQUETA_MEDIO, MEDIOS_PAGO } from '@/shared/dominio/tipos';
 import { Boton, Campo, Card, ErrorCaja, soles } from '@/shared/ui/primitivos';
 import { EncabezadoSeccion } from '@/shared/ui/tabla';
+import { hora } from '@/shared/ui/fechas';
 
 /**
  * Caja y turno. El cierre exige contar el inventario y justificar cada descuadre:
@@ -120,10 +121,7 @@ export function VistaCaja({ caja, ventas }: { caja: EstadoCaja; ventas: ResumenV
             <div>
               <span className="text-tx-sec">Desde </span>
               <strong className="font-medium tabular-nums">
-                {new Date(caja.turno.abierto_at).toLocaleTimeString('es-PE', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+                {hora(caja.turno.abierto_at)}
               </strong>
             </div>
             <div>
@@ -184,7 +182,7 @@ function Modal({
             <p className="text-[16px] font-semibold">{titulo}</p>
             {subtitulo && <p className="mt-0.5 text-[13px] text-tx-sec">{subtitulo}</p>}
           </div>
-          <button
+          <button type="button"
             onClick={onCerrar}
             aria-label="Cerrar"
             className="grid size-8 place-items-center rounded-md text-tx-muted hover:bg-surf-hover hover:text-tx cursor-pointer"

@@ -14,7 +14,9 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   return (
     <Chasis
       sesion={sesion}
-      incidenciasAbiertas={resumen.ok ? resumen.datos.incidenciasAbiertas : 0}
+      incidenciasAbiertas={
+        resumen.ok ? resumen.datos.incidenciasAbiertas + resumen.datos.bajoMinimo.length : 0
+      }
     >
       {children}
     </Chasis>

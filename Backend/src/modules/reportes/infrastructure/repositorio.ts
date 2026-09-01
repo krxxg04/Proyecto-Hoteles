@@ -10,7 +10,7 @@ export async function datosDelPanel(desdeAyer: string, hoy: string, desdeSerie: 
       supabase.from('ventas').select('monto, created_at').gte('created_at', desdeAyer),
       supabase.from('estadias').select('id').eq('estado', 'activa').lte('fecha_salida', hoy),
       supabase.from('incidencias').select('id').eq('estado', 'abierta'),
-      supabase.from('productos').select('nombre, unidad, stock, stock_max').eq('activo', true),
+      supabase.from('productos').select('nombre, unidad, stock, stock_max, stock_min').eq('activo', true),
 
       // Lo que salió del almacén: ventas y entregas a cuartos. La cantidad va negativa.
       supabase

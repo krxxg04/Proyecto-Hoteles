@@ -254,7 +254,7 @@ export function Paleta({ rol }: { rol: Rol }) {
                     {encabezado}
                   </p>
                 )}
-                <button
+                <button type="button"
                   id={c.id}
                   role="option"
                   aria-selected={on}

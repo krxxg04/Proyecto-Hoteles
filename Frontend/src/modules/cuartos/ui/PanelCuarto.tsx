@@ -15,6 +15,7 @@ import { moverStock } from '@/modules/inventario/infrastructure/acciones';
 import type { Producto } from '@/modules/inventario/domain/tipos';
 import { ESTILO_ESTADO, FLUJO_ESTADOS } from './estados';
 import { SIGUIENTE_PASO } from './flujo';
+import { fechaYHora } from '@/shared/ui/fechas';
 
 /**
  * Panel lateral de una habitación. Portado de `openRoom()` del prototipo.
@@ -50,15 +51,6 @@ function Dato({ titulo, children }: { titulo: string; children: React.ReactNode 
       <p className="mt-0.5 text-[13px] font-medium">{children}</p>
     </div>
   );
-}
-
-function fechaCorta(iso: string) {
-  return new Date(iso).toLocaleString('es-PE', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 function soloFecha(iso: string) {
@@ -152,7 +144,7 @@ export function PanelCuarto({
       >
         {/* Cabecera pegajosa, como el `dHead` del mockup. */}
         <div className="glass sticky top-0 z-10 flex h-14 items-center gap-3 hair-b px-4 backdrop-blur">
-          <button
+          <button type="button"
             onClick={onCerrar}
             aria-label="Cerrar"
             className="grid size-8 shrink-0 place-items-center rounded-md text-tx-sec hover:bg-surf-hover cursor-pointer"
@@ -208,7 +200,7 @@ export function PanelCuarto({
 
                 <Dato titulo="Última limpieza">
                   {detalle.ultima_limpieza
-                    ? `${fechaCorta(detalle.ultima_limpieza.created_at)}${
+                    ? `${fechaYHora(detalle.ultima_limpieza.created_at)}${
                         detalle.ultima_limpieza.profiles?.nombre
                           ? ` · ${detalle.ultima_limpieza.profiles.nombre}`
                           : ''
@@ -250,7 +242,7 @@ export function PanelCuarto({
                 const st = ESTILO_ESTADO[k];
                 const actual = cuarto.estado === k;
                 return (
-                  <button
+                  <button type="button"
                     key={k}
                     onClick={() => cambiar(k)}
                     disabled={actual || ocupado}
@@ -386,7 +378,7 @@ function AccionRapida({
   onClick: () => void;
 }) {
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       disabled={disabled}
       className="flex h-10 items-center gap-2 rounded-md bg-surf hair px-3 text-left text-[13px] font-medium transition-colors hover:bg-surf-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"

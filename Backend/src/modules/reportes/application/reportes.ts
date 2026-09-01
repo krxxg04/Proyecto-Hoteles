@@ -127,10 +127,14 @@ export async function resumenPanel(): Promise<Resultado<ResumenPanel>> {
     unidad: string;
     stock: number;
     stock_max: number;
+    stock_min: number;
   }>;
 
-  const stockCritico = productos.filter(
-    (p) => p.stock_max > 0 && p.stock / p.stock_max < 0.25
+  // Cuenta el mínimo de cada producto; sin mínimo configurado, el 25 % de siempre.
+  const stockCritico = productos.filter((p) =>
+    Number(p.stock_min) > 0
+      ? Number(p.stock) <= Number(p.stock_min)
+      : p.stock_max > 0 && p.stock / p.stock_max < 0.25
   ).length;
 
   /**
@@ -145,19 +149,29 @@ export async function resumenPanel(): Promise<Resultado<ResumenPanel>> {
    */
   const candidatos = productos.map((p) => {
     const porDia = (consumidoPorProducto.get(p.nombre)?.cantidad ?? 0) / DIAS_SERIE;
+    const min = Number(p.stock_min) || 0;
     return {
       nombre: p.nombre,
       dias: porDia > 0 ? Math.max(0, Math.round(Number(p.stock) / porDia)) : null,
       nivel: p.stock_max > 0 ? Math.round((Number(p.stock) / Number(p.stock_max)) * 100) : 0,
+      unidad: p.unidad,
+      stock: Number(p.stock),
+      stock_min: min,
+      bajoMinimo: min > 0 && Number(p.stock) <= min,
     };
   });
+
+  /** Los que ya tocaron su mínimo. Es la alerta que pidió el hostal, y va por delante. */
+  const bajoMinimo = candidatos
+    .filter((c) => c.bajoMinimo)
+    .sort((a, b) => a.stock - a.stock_min - (b.stock - b.stock_min));
 
   const conDias = candidatos.filter((c) => c.dias !== null).sort((a, b) => a.dias! - b.dias!);
   const porNivel = [...candidatos].sort((a, b) => a.nivel - b.nivel);
 
   /** Un producto bajo el 25 % gana aunque otro tenga menos días: es el que se queda a cero. */
   const critico = porNivel[0] && porNivel[0].nivel < 25 ? porNivel[0] : null;
-  const porAcabarse: ResumenPanel['porAcabarse'] = critico ?? conDias[0] ?? null;
+  const porAcabarse: ResumenPanel['porAcabarse'] = bajoMinimo[0] ?? critico ?? conDias[0] ?? null;
 
   return exito({
     cuartos: { total, ocupados, disponibles, listas, porLimpiar },
@@ -179,6 +193,7 @@ export async function resumenPanel(): Promise<Resultado<ResumenPanel>> {
       tipos: masFrecuentes(porTipo, 4),
     },
     porAcabarse,
+    bajoMinimo,
   });
 }
 

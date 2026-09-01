@@ -94,7 +94,7 @@ export function CajonInspeccion() {
         aria-label="Inspección"
       >
         <div className="glass sticky top-0 z-10 flex h-16 items-center gap-3 hair-b px-4 backdrop-blur">
-          <button
+          <button type="button"
             onClick={cerrar}
             aria-label="Cerrar la inspección"
             className="grid size-8 shrink-0 place-items-center rounded-md text-tx-sec transition-colors hover:bg-surf-hover hover:text-tx cursor-pointer"

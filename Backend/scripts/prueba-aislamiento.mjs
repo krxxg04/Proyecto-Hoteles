@@ -558,6 +558,91 @@ comprobar(
 );
 await admin.from('productos').update({ stock: productoB.stock }).eq('id', productoB.id);
 
+/**
+ * El catálogo es de administración (migración 10).
+ *
+ * En UPDATE y DELETE el RLS no lanza error: simplemente no afecta filas. Así que no basta
+ * con mirar `error` — hay que volver a leer con `service_role` y comprobar que la fila
+ * sigue como estaba. Contar el error habría dado un falso verde.
+ */
+const catalogoIntacto = async (etiqueta, accion, leer, esperado) => {
+  await accion();
+  const actual = await leer();
+  comprobar(etiqueta, actual === esperado, `quedó en ${actual}`);
+};
+
+const { data: tipoB } = await admin
+  .from('tipos_cuarto').select('id, activo').eq('tenant_id', tenantB).limit(1).single();
+
+const precioProducto = async () => {
+  const { data } = await admin.from('productos').select('precio').eq('id', productoB.id).single();
+  return Number(data.precio);
+};
+const precioOriginal = await precioProducto();
+
+await catalogoIntacto(
+  'limpieza no puede cambiarle el precio a un producto',
+  () => clienteLimpiezaB.from('productos').update({ precio: 999 }).eq('id', productoB.id),
+  precioProducto,
+  precioOriginal
+);
+
+await catalogoIntacto(
+  'limpieza no puede desactivar la alerta de stock mínimo',
+  () => clienteLimpiezaB.from('productos').update({ stock_min: 0 }).eq('id', productoB.id),
+  async () => {
+    const { count } = await admin
+      .from('productos').select('*', { count: 'exact', head: true }).eq('id', productoB.id);
+    return count;
+  },
+  1
+);
+
+const { data: insProducto } = await clienteLimpiezaB
+  .from('productos')
+  .insert({ tenant_id: tenantB, nombre: 'Contrabando', unidad: 'u', stock_max: 10 })
+  .select();
+comprobar('limpieza no puede crear un producto', !insProducto?.length, 'lo creó');
+
+const { data: insCuarto } = await clienteLimpiezaB
+  .from('cuartos')
+  .insert({ tenant_id: tenantB, numero: 'X-778', tipo_id: tipoB.id, aforo: 2 })
+  .select();
+comprobar('limpieza no puede crear un cuarto', !insCuarto?.length, 'lo creó');
+
+await catalogoIntacto(
+  'limpieza no puede borrar un cuarto',
+  () => clienteLimpiezaB.from('cuartos').delete().eq('id', cuartoB.id),
+  async () => {
+    const { count } = await admin
+      .from('cuartos').select('*', { count: 'exact', head: true }).eq('id', cuartoB.id);
+    return count;
+  },
+  1
+);
+
+// Se parte de un cuarto en pie: una corrida anterior pudo dejarlo caído y eso daría un
+// falso rojo (o, peor, un falso verde si algún día se invierte la comprobación).
+await admin.from('cuartos').update({ activo: true }).eq('id', cuartoB.id);
+await catalogoIntacto(
+  'limpieza no puede inhabilitar un cuarto por la puerta de atrás',
+  () => clienteLimpiezaB.from('cuartos').update({ activo: false }).eq('id', cuartoB.id),
+  async () => {
+    const { data } = await admin.from('cuartos').select('activo').eq('id', cuartoB.id).single();
+    return data.activo;
+  },
+  true
+);
+
+for (const fn of ['inhabilitar_tipo_cuarto', 'habilitar_tipo_cuarto']) {
+  const { error } = await clienteLimpiezaB.rpc(fn, { p_tipo_id: tipoB.id });
+  comprobar(`limpieza no puede ejecutar ${fn}()`, !!error, 'lo ejecutó');
+}
+const { error: errHabCuarto } = await clienteLimpiezaB.rpc('habilitar_cuarto', {
+  p_cuarto_id: cuartoB.id,
+});
+comprobar('limpieza no puede ejecutar habilitar_cuarto()', !!errHabCuarto, 'lo ejecutó');
+
 // --------------------------------------------------------- 7 · realtime
 
 bloque('7 · Realtime — el socket también filtra por hostal');
@@ -572,6 +657,10 @@ bloque('7 · Realtime — el socket también filtra por hostal');
  *
  * Las esperas no son de adorno: el servidor tarda en registrar la suscripción, y
  * cambiar la fila antes de que termine da un falso negativo. Me pasó.
+ *
+ * Solo se cuentan los mensajes DE LA FILA que se tocó. El canal escucha toda la tabla, y
+ * cualquier otro cambio del mismo hostal —el de otra comprobación, el de otra pestaña—
+ * llegaría también: contarlo como fuga es un falso rojo que aparece y desaparece solo.
  */
 async function escuchar(clienteEscucha, etiqueta, tenantDelCambio) {
   const { data: fila } = await admin
@@ -582,7 +671,8 @@ async function escuchar(clienteEscucha, etiqueta, tenantDelCambio) {
     .channel(`aislamiento-${etiqueta}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'cuartos' }, (m) => {
       const trajo = Object.keys(m.new ?? {}).length > 0 || Object.keys(m.old ?? {}).length > 0;
-      if (trajo) conDatos.push(m);
+      const esLaFila = (m.new?.id ?? m.old?.id) === fila.id;
+      if (trajo && esLaFila) conDatos.push(m);
     })
     .subscribe();
 

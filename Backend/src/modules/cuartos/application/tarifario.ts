@@ -43,10 +43,12 @@ export async function sugerirCuarto(
   return exito((data ?? []) as CuartoSugerido[]);
 }
 
-export async function listarTiposCuarto(): Promise<Resultado<TipoCuarto[]>> {
+export async function listarTiposCuarto(
+  incluirInactivos = false
+): Promise<Resultado<TipoCuarto[]>> {
   await exigirSesion();
 
-  const { data, error } = await repo.buscarTiposCuarto();
+  const { data, error } = await repo.buscarTiposCuarto(incluirInactivos);
   if (error) return fallo(traducirError(error));
   return exito((data ?? []) as TipoCuarto[]);
 }
@@ -69,4 +71,24 @@ export async function guardarTipoCuarto(
 
   revalidatePath('/admin/tarifas');
   return exito(data as TipoCuarto);
+}
+
+/**
+ * Inhabilitar y volver a habilitar un tipo de cuarto.
+ *
+ * Nunca se borra: hay estadías cobradas con esa tarifa. La regla de «no si todavía hay
+ * cuartos activos» vive en `inhabilitar_tipo_cuarto()`, no aquí, para que tampoco pase
+ * por PostgREST.
+ */
+export async function cambiarActivoTipoCuarto(
+  id: string,
+  activo: boolean
+): Promise<Resultado<null>> {
+  await exigirRol(...ROLES_ADMIN);
+
+  const { error } = await repo.cambiarActivoTipo(id, activo);
+  if (error) return fallo(traducirError(error));
+
+  revalidatePath('/admin/cuartos');
+  return exito(null);
 }

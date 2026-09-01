@@ -95,15 +95,23 @@ const CUARTOS = [
  * movimientos registrados, para que el kardex cuadre desde el primer día.
  * `stock_actual` es el número que el prototipo mostraba (`qty`).
  */
+/**
+ * `stock_min` es el aviso de reposición: con menos que eso ya no da tiempo a comprar.
+ *
+ * Se elige contra el consumo, no contra el máximo. El kit de aseo se gasta ~2 cada 14 días:
+ * pedirle un mínimo de 20 sería exigir stock para 140 días, y la alerta saltaría mientras la
+ * propia tarjeta dice que da para tres meses. El papel va a 30 a propósito: es el que el
+ * prototipo mostraba corto y el que tiene que avisar.
+ */
 const PRODUCTOS = [
-  { nombre: 'Papel higiénico', icono: 'scroll-text', unidad: 'rollos', stock_actual: 22, stock_max: 120, categoria: 'insumo',   clase: 'descartable',    precio: 0 },
-  { nombre: 'Toallas',         icono: 'shirt',       unidad: 'unid.',  stock_actual: 38, stock_max: 80,  categoria: 'insumo',   clase: 'no_descartable', precio: 0 },
-  { nombre: 'Sábanas',         icono: 'bed',         unidad: 'juegos', stock_actual: 44, stock_max: 60,  categoria: 'insumo',   clase: 'no_descartable', precio: 0 },
-  { nombre: 'Almohadas',       icono: 'cloud',       unidad: 'unid.',  stock_actual: 31, stock_max: 50,  categoria: 'insumo',   clase: 'no_descartable', precio: 0 },
-  { nombre: 'Kit de aseo',     icono: 'sparkles',    unidad: 'kits',   stock_actual: 15, stock_max: 60,  categoria: 'vendible', clase: 'descartable',    precio: 8 },
-  { nombre: 'Jabón',           icono: 'droplet',     unidad: 'unid.',  stock_actual: 52, stock_max: 80,  categoria: 'insumo',   clase: 'descartable',    precio: 0 },
-  { nombre: 'Agua 500 ml',     icono: 'cup-soda',    unidad: 'unid.',  stock_actual: 40, stock_max: 60,  categoria: 'vendible', clase: 'descartable',    precio: 2 },
-  { nombre: 'Gaseosa',         icono: 'cup-soda',    unidad: 'unid.',  stock_actual: 24, stock_max: 48,  categoria: 'vendible', clase: 'descartable',    precio: 4 },
+  { nombre: 'Papel higiénico', icono: 'scroll-text', unidad: 'rollos', stock_actual: 22, stock_max: 120, stock_min: 30, categoria: 'insumo',   clase: 'descartable',    precio: 0 },
+  { nombre: 'Toallas',         icono: 'shirt',       unidad: 'unid.',  stock_actual: 38, stock_max: 80, stock_min: 20,  categoria: 'insumo',   clase: 'no_descartable', precio: 0 },
+  { nombre: 'Sábanas',         icono: 'bed',         unidad: 'juegos', stock_actual: 44, stock_max: 60, stock_min: 15,  categoria: 'insumo',   clase: 'no_descartable', precio: 0 },
+  { nombre: 'Almohadas',       icono: 'cloud',       unidad: 'unid.',  stock_actual: 31, stock_max: 50, stock_min: 12,  categoria: 'insumo',   clase: 'no_descartable', precio: 0 },
+  { nombre: 'Kit de aseo',     icono: 'sparkles',    unidad: 'kits',   stock_actual: 15, stock_max: 60, stock_min: 8,   categoria: 'vendible', clase: 'descartable',    precio: 8 },
+  { nombre: 'Jabón',           icono: 'droplet',     unidad: 'unid.',  stock_actual: 52, stock_max: 80, stock_min: 20,  categoria: 'insumo',   clase: 'descartable',    precio: 0 },
+  { nombre: 'Agua 500 ml',     icono: 'cup-soda',    unidad: 'unid.',  stock_actual: 40, stock_max: 60, stock_min: 15,  categoria: 'vendible', clase: 'descartable',    precio: 2 },
+  { nombre: 'Gaseosa',         icono: 'cup-soda',    unidad: 'unid.',  stock_actual: 24, stock_max: 48, stock_min: 12,  categoria: 'vendible', clase: 'descartable',    precio: 4 },
 ];
 
 /**

@@ -1,9 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, Check, Trash2, TriangleAlert } from 'lucide-react';
 import { Boton, ErrorCaja } from '@/shared/ui/primitivos';
 import { subirFoto } from '../infrastructure/acciones';
+import { mediosDisponibles } from '../infrastructure/disponibilidad';
 import { EXIGE_CONSENTIMIENTO, type TipoMedio } from '../domain/tipos';
 
 /**
@@ -34,9 +35,20 @@ export function CapturaFoto({
   const [subida, setSubida] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consiente, setConsiente] = useState(false);
+  const [disponible, setDisponible] = useState(false);
 
   const pideConsentimiento = EXIGE_CONSENTIMIENTO.includes(tipo);
   const bloqueado = pideConsentimiento && !consiente;
+
+  useEffect(() => {
+    let vivo = true;
+    mediosDisponibles().then((r) => {
+      if (vivo) setDisponible(r);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   async function elegir(archivo: File | undefined) {
     if (!archivo) return;
@@ -73,6 +85,9 @@ export function CapturaFoto({
     onSubida(null);
     if (entradaRef.current) entradaRef.current.value = '';
   }
+
+  // Nada que ofrecer si el almacenamiento no está configurado; `GET /api/salud` lo reporta.
+  if (!disponible) return null;
 
   return (
     <div className="rounded-lg bg-surf hair p-3">

@@ -1,3 +1,13 @@
+export type ProductoEnAviso = {
+  nombre: string;
+  dias: number | null;
+  nivel: number;
+  unidad: string;
+  stock: number;
+  stock_min: number;
+  bajoMinimo: boolean;
+};
+
 /** Espejo de `Backend/src/modules/reportes/domain/tipos.ts`. El contrato lo fija `/api/openapi`. */
 
 /** Una barra de las dos listas de «Consumo del hostal». */
@@ -29,5 +39,7 @@ export type ResumenPanel = {
   consumo: { productos: LineaConsumo[]; tipos: LineaConsumo[] };
 
   /** El insumo a reponer antes. `dias` es null si no hay consumo del que estimarlo. */
-  porAcabarse: { nombre: string; dias: number | null; nivel: number } | null;
+  porAcabarse: ProductoEnAviso | null;
+  /** Los que ya tocaron su mínimo, del más corto de stock al menos. */
+  bajoMinimo: ProductoEnAviso[];
 };

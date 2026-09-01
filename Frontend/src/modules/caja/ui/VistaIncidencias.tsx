@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, TriangleAlert } from 'lucide-react';
+import { Check, PackageOpen, TriangleAlert } from 'lucide-react';
 import type { Incidencia } from '../domain/tipos';
+import type { ProductoEnAviso } from '@/modules/reportes/domain/tipos';
 import { revisarIncidencia } from '../infrastructure/acciones';
 import { Boton, Card, Chip, ErrorCaja, Pildora, Vacio } from '@/shared/ui/primitivos';
 import { EncabezadoSeccion } from '@/shared/ui/tabla';
+import { fechaYHora } from '@/shared/ui/fechas';
 
 /**
  * Descuadres del cierre de turno.
@@ -14,7 +16,65 @@ import { EncabezadoSeccion } from '@/shared/ui/tabla';
  * "Revisada" significa que una persona la miró y decidió, no que el sistema la resolviera.
  * Nunca se acusa a nadie automáticamente — es regla de producto, no detalle de implementación.
  */
-export function VistaIncidencias({ incidencias }: { incidencias: Incidencia[] }) {
+/**
+ * Stock que tocó su mínimo. Va arriba porque se arregla comprando, hoy, antes de que falte.
+ *
+ * Los días de cobertura solo salen si acompañan al aviso. Decir «reponer» y a la vez «da para
+ * ~105 días» es contradecirse en la misma línea: manda el mínimo, que lo puso una persona,
+ * y el resto es una estimación que ahí no ayuda.
+ */
+const DIAS_QUE_APREMIAN = 30;
+
+function AvisosDeStock({ productos }: { productos: ProductoEnAviso[] }) {
+  if (productos.length === 0) return null;
+
+  return (
+    <section>
+      <EncabezadoSeccion
+        titulo="Stock por reponer"
+        subtitulo={
+          productos.length === 1
+            ? '1 producto llegó a su mínimo'
+            : `${productos.length} productos llegaron a su mínimo`
+        }
+      />
+      <div className="flex flex-col gap-2">
+        {productos.map((p) => (
+          <Card key={p.nombre}>
+            <div className="flex items-center gap-3">
+              <div
+                className="grid size-9 shrink-0 place-items-center rounded-lg"
+                style={{ background: 'rgba(239,68,68,.14)' }}
+              >
+                <PackageOpen className="size-[18px]" style={{ color: '#EF4444' }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold">{p.nombre}</p>
+                <p className="text-[12.5px] text-tx-muted">
+                  Quedan{' '}
+                  <strong className="tabular-nums text-danger">
+                    {p.stock} {p.unidad}
+                  </strong>{' '}
+                  · el mínimo son {p.stock_min}
+                  {p.dias !== null && p.dias <= DIAS_QUE_APREMIAN && ` · da para ~${p.dias} días`}
+                </p>
+              </div>
+              <Chip tono="danger">Reponer</Chip>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function VistaIncidencias({
+  incidencias,
+  bajoMinimo = [],
+}: {
+  incidencias: Incidencia[];
+  bajoMinimo?: ProductoEnAviso[];
+}) {
   const router = useRouter();
   const [filtro, setFiltro] = useState<'abiertas' | 'todas'>('abiertas');
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +93,10 @@ export function VistaIncidencias({ incidencias }: { incidencias: Incidencia[] })
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      <AvisosDeStock productos={bajoMinimo} />
+
+      <section className="flex flex-col gap-4">
       <EncabezadoSeccion
         titulo="Incidencias"
         subtitulo="Descuadres registrados al cerrar turno"
@@ -89,12 +152,7 @@ export function VistaIncidencias({ incidencias }: { incidencias: Incidencia[] })
                     </p>
 
                     <p className="mt-2 text-[11.5px] text-tx-muted">
-                      {new Date(i.created_at).toLocaleString('es-PE', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {fechaYHora(i.created_at)}
                     </p>
                   </div>
 
@@ -110,6 +168,7 @@ export function VistaIncidencias({ incidencias }: { incidencias: Incidencia[] })
           })}
         </div>
       )}
+      </section>
     </div>
   );
 }

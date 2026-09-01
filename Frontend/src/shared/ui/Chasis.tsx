@@ -15,6 +15,7 @@ import { ETIQUETA_ROL } from '@/shared/dominio/tipos';
 import { Paleta } from './Paleta';
 import { CajonCheckin, abrirCheckin } from '@/modules/estadias/ui/CajonCheckin';
 import { CajonInspeccion } from '@/modules/estadias/ui/CajonInspeccion';
+import { diaYMes } from './fechas';
 
 /** Sidebar agrupado + topbar + bottom nav, como el marco del mockup. */
 
@@ -43,7 +44,7 @@ function BotonTema() {
   }
 
   return (
-    <button
+    <button type="button"
       onClick={alternar}
       aria-label="Cambiar entre tema claro y oscuro"
       className="theme-btn relative grid size-9 place-items-center rounded-md text-tx-sec transition-colors hover:bg-surf-hover hover:text-tx cursor-pointer"
@@ -68,7 +69,7 @@ function abrir() {
 
 function BotonBuscar() {
   return (
-    <button
+    <button type="button"
       onClick={abrir}
       aria-label="Buscar una acción"
       className="flex items-center gap-2 rounded-md bg-bg-ter hair px-2.5 py-1.5 text-[12.5px] text-tx-muted transition-colors hover:bg-surf-hover hover:text-tx cursor-pointer"
@@ -125,7 +126,11 @@ export function Chasis({
   children,
 }: {
   sesion: Sesion;
-  /** Para el punto rojo de la campana. Sale del panel, no de una consulta aparte. */
+  /**
+   * Para el punto rojo de la campana. Sale del panel, no de una consulta aparte.
+   * Suma los descuadres sin revisar y los productos que tocaron su mínimo: las dos
+   * cosas se atienden en Alertas y las dos piden que alguien haga algo hoy.
+   */
   incidenciasAbiertas?: number;
   children: React.ReactNode;
 }) {
@@ -193,7 +198,7 @@ export function Chasis({
         </nav>
 
         {/* El mockup repite el buscador al pie: es el mismo Ctrl+K, al alcance del pulgar. */}
-        <button
+        <button type="button"
           onClick={abrir}
           aria-label="Buscar una acción"
           className="mt-4 flex items-center gap-2.5 rounded-lg bg-bg-ter hair px-3 py-2.5 text-[13px] text-tx-muted transition-colors hover:bg-surf-hover hover:text-tx cursor-pointer"
@@ -211,7 +216,7 @@ export function Chasis({
             <p className="truncate text-[13px] font-medium">{sesion.nombre || sesion.dni}</p>
             <p className="text-[11.5px] text-tx-muted">{ETIQUETA_ROL[sesion.rol]}</p>
           </div>
-          <button
+          <button type="button"
             onClick={salir}
             aria-label="Cerrar sesión"
             className="grid size-8 place-items-center rounded-md text-tx-muted transition-colors hover:bg-surf-hover hover:text-tx cursor-pointer"
@@ -226,11 +231,7 @@ export function Chasis({
         <div className="mx-auto flex h-14 max-w-[1536px] items-center gap-3 px-4 sm:px-6">
           <h1 className="text-[17px] font-semibold tracking-tight">{actual?.etiqueta ?? 'Panel'}</h1>
           <span className="hidden text-[12.5px] text-tx-muted sm:block">
-            {new Date().toLocaleDateString('es-PE', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            })}
+            {diaYMes(new Date())}
           </span>
           <div className="ml-auto flex items-center gap-1.5">
             <BotonBuscar />
@@ -241,8 +242,8 @@ export function Chasis({
                 href="/alertas"
                 aria-label={
                   incidenciasAbiertas > 0
-                    ? `${incidenciasAbiertas} incidencias sin revisar`
-                    : 'Incidencias'
+                    ? `${incidenciasAbiertas} avisos sin atender`
+                    : 'Alertas'
                 }
                 className="relative grid size-9 place-items-center rounded-md text-tx-sec transition-colors hover:bg-surf-hover hover:text-tx"
               >
@@ -257,7 +258,7 @@ export function Chasis({
 
             {/* Acción principal, en la esquina y no en el menú: es la del mockup. */}
             {puedeHacerCheckin(sesion.rol) && (
-              <button
+              <button type="button"
                 onClick={abrirCheckin}
                 className="md-raise ml-1 inline-flex h-9 items-center gap-2 rounded-md bg-brand-500 px-3.5 text-[13px] font-semibold text-onbrand transition-colors hover:bg-brand-600 cursor-pointer"
               >

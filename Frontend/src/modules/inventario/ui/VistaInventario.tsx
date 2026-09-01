@@ -41,12 +41,12 @@ export function VistaInventario({
   const [enviando, empezar] = useTransition();
 
   const visibles = productos.filter((p) => {
-    if (filtro === 'critico') return p.semaforo === 'danger';
+    if (filtro === 'critico') return p.bajoMinimo || p.semaforo === 'danger';
     if (filtro === 'todos') return true;
     return p.categoria === filtro;
   });
 
-  const criticos = productos.filter((p) => p.semaforo === 'danger').length;
+  const criticos = productos.filter((p) => p.bajoMinimo || p.semaforo === 'danger').length;
 
   /**
    * Comprar y vender mueven dinero; entregar y mandar a lavandería, no.
@@ -112,6 +112,13 @@ export function VistaInventario({
                         </>
                       )}
                     </p>
+                    {p.stock_min > 0 && (
+                      <p className="text-[11.5px]" style={{ color: p.bajoMinimo ? color : undefined }}>
+                        {p.bajoMinimo
+                          ? `Reponer: el mínimo son ${p.stock_min}`
+                          : `Mínimo ${p.stock_min} ${p.unidad}`}
+                      </p>
+                    )}
                   </div>
                   <span className="ml-auto text-[13px] font-semibold tabular-nums text-tx-sec">
                     {p.nivel}%
@@ -144,7 +151,7 @@ export function VistaInventario({
                     </Boton>
                   )}
                   {manejaDinero && p.categoria === 'vendible' && (
-                    <button
+                    <button type="button"
                       onClick={() => setDialogo({ tipo: 'vender', producto: p })}
                       className="flex h-8 cursor-pointer items-center gap-1 rounded-md px-3 text-[12.5px] font-medium"
                       style={{ color: '#7C4DFF', background: 'rgba(124,77,255,.12)' }}

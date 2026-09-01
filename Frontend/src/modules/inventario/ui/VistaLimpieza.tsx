@@ -13,6 +13,7 @@ import { Boton, Chip, ErrorCaja } from '@/shared/ui/primitivos';
 import { EncabezadoSeccion } from '@/shared/ui/tabla';
 import { useEnVivo } from '@/shared/ui/useEnVivo';
 import { PuntoEnVivo } from '@/shared/ui/PuntoEnVivo';
+import { fechaYHora } from '@/shared/ui/fechas';
 
 /** Qué hay que limpiar ahora y qué está en lavandería. Portada del mockup. */
 
@@ -135,12 +136,7 @@ export function VistaLimpieza({
                   <p className="text-[11px] text-tx-muted">
                     {a.profiles?.nombre ?? '—'}
                     {a.cuartos?.numero ? ` · Hab. ${a.cuartos.numero}` : ''} ·{' '}
-                    {new Date(a.enviado_at).toLocaleString('es-PE', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {fechaYHora(a.enviado_at)}
                   </p>
                 </div>
                 <Boton variante="secundario" disabled={ocupado} onClick={() => listo(a.id)}>
