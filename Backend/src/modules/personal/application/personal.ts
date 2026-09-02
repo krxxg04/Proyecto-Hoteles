@@ -65,6 +65,10 @@ export async function crearPersona(
   }
 
   // El trigger `auth_crear_profile` ya creó el perfil y metió tenant_id y rol en el JWT.
+  // El PIN lo eligió quien da de alta, no la persona: se marca temporal para que la app
+  // le obligue a cambiarlo en el primer ingreso (migración 14).
+  await repo.marcarPinTemporal(creado.user!.id);
+
   revalidatePath('/admin/personal');
   return exito({ id: creado.user!.id, dni: parsed.data.dni });
 }
@@ -110,6 +114,9 @@ export async function reiniciarPin(id: string, pinNuevo: string): Promise<Result
 
   const { error } = await repo.reemplazarPin(id, pinNuevo);
   if (error) return fallo(traducirError(error));
+
+  // Lo eligió el administrador, así que la persona tendrá que cambiarlo al entrar.
+  await repo.marcarPinTemporal(id);
 
   revalidatePath('/admin/personal');
   return exito(null);

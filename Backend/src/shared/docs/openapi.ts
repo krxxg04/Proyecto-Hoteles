@@ -87,7 +87,18 @@ export const documentoOpenAPI = {
       get: {
         tags: ['Servicio'],
         summary: 'Ping público',
+        description:
+          'Con `?db=1` además consulta Postgres y devuelve `base: { ok, ms }`. Sin el parámetro no toca la base: el health check de Render pega aquí seguido y no debe reiniciar el servicio por un hipo de Supabase. El keep-alive sí usa `?db=1`, porque un proyecto Supabase gratuito se pausa tras 7 días sin actividad.',
         security: [],
+        parameters: [
+          {
+            name: 'db',
+            in: 'query',
+            description: 'Cualquier valor no vacío añade una consulta mínima a Postgres.',
+            schema: { type: 'string' },
+            example: '1',
+          },
+        ],
         responses: {
           '200': {
             description: 'El servicio responde.',
@@ -99,6 +110,15 @@ export const documentoOpenAPI = {
                     ok: { type: 'boolean' },
                     servicio: { type: 'string' },
                     supabase: { type: 'boolean' },
+                    base: {
+                      type: 'object',
+                      description: 'Solo con `?db=1`.',
+                      properties: {
+                        ok: { type: 'boolean' },
+                        ms: { type: 'integer' },
+                        error: { type: 'string' },
+                      },
+                    },
                   },
                 },
                 example: { ok: true, servicio: 'hostal-backend', supabase: true },
@@ -120,6 +140,12 @@ export const documentoOpenAPI = {
           properties: {
             dni: { type: 'string', minLength: 6, maxLength: 20, pattern: '^[0-9A-Za-z-]+$' },
             pin: { type: 'string', minLength: 4, maxLength: 64 },
+            hostal: {
+              type: 'string',
+              maxLength: 60,
+              description:
+                'El slug del hostal. Solo hace falta si el mismo DNI trabaja en más de uno; en ese caso la respuesta llega con `campo: "hostal"`.',
+            },
           },
           required: ['dni', 'pin'],
           example: { dni: '40123456', pin: '123456' },
@@ -141,6 +167,21 @@ export const documentoOpenAPI = {
             },
           },
         },
+      },
+      patch: {
+        tags: ['Sesión'],
+        summary: 'Cambiar el PIN propio',
+        description:
+          'Exige el PIN actual: una tablet con la sesión abierta no basta para secuestrar la cuenta. Al cambiarlo se levanta la marca de PIN temporal.',
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: {
+            pinActual: { type: 'string', minLength: 4, maxLength: 64 },
+            pinNuevo: { type: 'string', minLength: 4, maxLength: 64 },
+          },
+          required: ['pinActual', 'pinNuevo'],
+        }),
+        responses: respuesta('PIN cambiado.', { type: 'null' }),
       },
       delete: {
         tags: ['Sesión'],
@@ -314,6 +355,21 @@ export const documentoOpenAPI = {
           type: 'object',
           properties: { id: Uuid, dni: { type: 'string' } },
         }),
+      },
+      patch: {
+        tags: ['Personal'],
+        summary: 'Reiniciar el PIN de alguien',
+        description:
+          'Solo administrador, y solo de su propio hostal. El PIN nunca se lee: se reemplaza. Queda marcado como temporal, así que la persona tendrá que cambiarlo al entrar.',
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: {
+            persona_id: Uuid,
+            pin: { type: 'string', pattern: '^[0-9]{4,64}$' },
+          },
+          required: ['persona_id', 'pin'],
+        }),
+        responses: respuesta('PIN reiniciado.', { type: 'null' }),
       },
       delete: {
         tags: ['Personal'],

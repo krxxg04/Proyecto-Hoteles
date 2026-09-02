@@ -12,6 +12,7 @@ export function FormularioLogin() {
   const router = useRouter();
   const [dni, setDni] = useState('');
   const [pin, setPin] = useState('');
+  const [hostal, setHostal] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [campo, setCampo] = useState<string | undefined>();
   const [enviando, empezar] = useTransition();
@@ -21,7 +22,7 @@ export function FormularioLogin() {
     setError(null);
 
     empezar(async () => {
-      const r = await iniciarSesion({ dni, pin });
+      const r = await iniciarSesion({ dni, pin, hostal: hostal || undefined });
       if (!r.ok) {
         setError(r.error);
         setCampo(r.campo);
@@ -67,6 +68,22 @@ export function FormularioLogin() {
               placeholder="••••••"
               error={campo === 'pin' ? error ?? undefined : undefined}
             />
+
+            {/*
+              El campo del hostal aparece solo cuando el servidor lo pide: el mismo DNI puede
+              trabajar en dos hostales, y antes se elegía uno arbitrariamente. Pedirlo siempre
+              sería estorbar al 99 % de la gente, que solo trabaja en uno.
+            */}
+            {campo === 'hostal' && (
+              <Campo
+                etiqueta="Hostal"
+                autoFocus
+                value={hostal}
+                onChange={(e) => setHostal(e.target.value)}
+                placeholder="aurora"
+                error={error ?? undefined}
+              />
+            )}
 
             {error && !campo && <ErrorCaja mensaje={error} />}
 

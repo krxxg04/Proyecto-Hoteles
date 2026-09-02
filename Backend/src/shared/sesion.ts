@@ -11,6 +11,8 @@ export type Sesion = {
   /** Nombre y plan del hostal. Solo los rellena `miSesion()`: cuestan una consulta. */
   hostal?: string;
   plan?: 'base' | 'premium';
+  /** El PIN lo puso otra persona. Solo lo rellena `miSesion()`. */
+  pinTemporal?: boolean;
 };
 
 /** `tenant_id` y `rol` viajan en el JWT, así que leerlos no cuesta consulta. Cae al perfil si faltan. */

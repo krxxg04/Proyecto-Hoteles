@@ -34,4 +34,6 @@ export type Sesion = {
   /** Nombre y plan del hostal. Los rellena `GET /api/auth`. */
   hostal?: string;
   plan?: 'base' | 'premium';
+  /** El PIN lo puso otra persona: hay que cambiarlo antes de seguir. */
+  pinTemporal?: boolean;
 };

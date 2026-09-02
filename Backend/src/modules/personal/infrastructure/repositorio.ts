@@ -77,3 +77,9 @@ export async function fijarActivo(id: string, activo: boolean) {
   const supabase = await clienteServidor();
   return supabase.from('profiles').update({ activo }).eq('id', id);
 }
+
+/** El PIN lo puso otra persona: la app obligará a cambiarlo. Va con admin porque el
+ *  perfil lo acaba de crear un trigger y puede no ser visible aún por RLS. */
+export async function marcarPinTemporal(id: string) {
+  return clienteAdmin().from('profiles').update({ pin_temporal: true }).eq('id', id);
+}

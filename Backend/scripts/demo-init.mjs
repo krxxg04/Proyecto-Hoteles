@@ -42,6 +42,9 @@ await correr('scripts/bootstrap.mjs', [
   '--dni', process.env.DEMO_ADMIN_DNI,
   '--nombre', process.env.DEMO_ADMIN_NOMBRE,
   '--pin', process.env.DEMO_ADMIN_PIN,
+  // La demo reparte las credenciales a propósito: si el PIN fuera temporal, el primer
+  // visitante que lo cambiara dejaría fuera a todos los demás.
+  '--pin-definitivo',
 ]);
 
 const seedArgs = ['--slug', slug];

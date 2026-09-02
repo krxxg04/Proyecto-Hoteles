@@ -1,6 +1,6 @@
 # Estado del proyecto — Hostal Inteligente
 
-> Documento de traspaso. Última actualización: 2026-08-28.
+> Documento de traspaso. Última actualización: 2026-09-02.
 > Contexto de producto: `context.md` · Stack: `ADR-001` · Arquitectura backend: `ADR-002` · Reglas: `CLAUDE.md`
 
 ---
@@ -24,6 +24,14 @@ Y esto de aquí, que es lo que no está escrito en ningún otro sitio:
 - **Hay dos cosas escritas y nunca ejecutadas**, y están marcadas como tales: el camino de
   Claude Haiku (falta la clave) y el de fotos en R2 (falta la cuenta). `GET /api/salud` lo
   dice. No las des por funcionando.
+- **Aparece un patrón, y ya cinco veces:** un caso de uso escrito en `application/` **sin
+  ruta HTTP y sin pantalla**. Pasó con `guardarTipoCuarto`, con el CRUD de cuartos, con
+  `guardarProducto(…, id)`, con `cambiarPin` y con `reiniciarPin`. Los cinco están
+  enganchados; **quedan 16 más** (§11 bis). Antes de escribir un caso de uso nuevo,
+  comprueba que el que buscas no exista ya sin puerta.
+- **El gate NO se corre contra producción.** `prueba:aislamiento` **crea** un segundo
+  hostal (`zz-prueba-aislamiento`) con dos usuarios de auth reales y los deja ahí. Para CI
+  hace falta un proyecto Supabase de pruebas, separado del de la demo.
 
 ### Los comandos
 
@@ -38,10 +46,12 @@ Y en `Backend/package.json`, todos con `--env-file=.env.local` ya puesto:
 |---|---|
 | `npm run migrar` | Aplica lo pendiente de `Database/` |
 | `npm run migrar:estado` | Solo informa: qué hay aplicado, qué falta, qué se alteró |
-| `npm run prueba:aislamiento` | **El gate.** 87 comprobaciones; sale con código 1 si falla |
+| `npm run prueba:aislamiento` | **El gate.** 92 comprobaciones; sale con código 1 si falla |
 | `npm run seed -- --slug aurora` | Los datos del prototipo (`--limpiar` borra y recarga) |
 | `npm run bootstrap -- ...` | Alta de un hostal nuevo con su primer administrador |
 | `npm run purgar:medios` | Borra las fotos vencidas (`--simular` para ver qué se iría) |
+| `npm run demo:init` | `bootstrap` + `seed` con las variables `DEMO_*`. Lo corre Render en el primer despliegue |
+| `npm run mantener-render-activo` | Ping a `/api/salud?db=1`. Despierta el servicio **y** la base |
 
 Y antes de dar algo por terminado, en las dos apps: `npx tsc --noEmit` y `npx eslint src/`.
 
@@ -75,7 +85,7 @@ Dos aplicaciones Next.js 16 independientes, funcionando contra una base Supabase
 Hotel/
   Backend/     API + lógica de negocio     · puerto 3000
   Frontend/    interfaz (PWA)              · puerto 3001
-  Database/    los 9 SQL, versionados
+  Database/    los 14 SQL, versionados
   index.html   prototipo, referencia visual y de lógica (no se toca)
 ```
 
@@ -93,13 +103,15 @@ Backend/src/
   modules/     asistente · auth · caja · cuartos · estadias · huespedes
                inventario · medios · personal · reportes · reservas · ventas
   shared/      sesion · resultado · http · origen · supabase/ · dominio/ · docs/
-  app/api/     20 rutas — la puerta, no la lógica
+  app/api/     22 rutas — la puerta, no la lógica
   app/docs/    Swagger
 Backend/scripts/
   bootstrap.mjs        alta de hostal + primer administrador
   seed.mjs             los datos del prototipo
   migrar.mjs           el runner de Database/
-  prueba-aislamiento.mjs   el gate: 74 comprobaciones
+  prueba-aislamiento.mjs   el gate: 92 comprobaciones
+  demo-init.mjs        bootstrap + seed para la demo desplegada
+  mantener-render-activo.mjs  el keep-alive de Render y de Supabase
   purgar-medios.mjs    borra las fotos vencidas (Ley 29733)
 
 Frontend/src/
@@ -109,6 +121,8 @@ Frontend/src/
                navegacion, useEnVivo) · supabase/navegador.ts (solo Realtime)
   app/(sesion)/ las rutas que exigen sesión; los paréntesis lo hacen route group
   app/login/   fuera del grupo: no puede exigir sesión quien va a iniciarla
+  app/cambiar-pin/  también fuera: el layout de (sesion) redirige aquí, y dentro
+                    se redirigiría a sí misma para siempre
 Frontend/scripts/
   iconos.mjs   genera los PNG del manifiesto desde icono.svg (usa sharp, que ya trae Next)
 ```
@@ -136,11 +150,35 @@ Entrar en <http://localhost:3001>. Usuarios cargados (§2):
 | `41567890` | `112200` | Luis Quispe | recepción |
 | `42876543` | `258000` | Marta Ríos | limpieza |
 
+Estos tres son de `seed` y su PIN **no** es temporal. En cambio, quien se dé de alta desde
+ahora —por `bootstrap`, por Personas o tras un reinicio de PIN— aterriza en
+`/cambiar-pin` y no entra a la app hasta cambiarlo (§6 quater). La excepción es
+`bootstrap --pin-definitivo`, que usa `demo:init`: en una demo pública las credenciales se
+reparten a propósito, y si el primer visitante cambiara el PIN dejaría fuera a los demás.
+
 ---
 
 ## 2. Base de datos
 
-Proyecto Supabase `hostal-atlas-dev`. **28 tablas · RLS activo en las 28 · aislamiento probado (§4).**
+Proyecto Supabase `hostal-atlas-dev`, región **`sa-east-1` (São Paulo)** — la más cercana a
+Perú que ofrece Supabase, ~60-80 ms de ida y vuelta desde Lima. **28 tablas · RLS activo en
+las 28 · aislamiento probado (§4).**
+
+### Cómo se crea un proyecto nuevo (demo o producción)
+
+Tres casillas en la pantalla de **New project**, y una de ellas importa:
+
+| Opción | Cómo | Por qué |
+|---|---|---|
+| Enable Data API | ✅ marcada | Todo el backend y el Realtime van por PostgREST |
+| **Automatically expose new tables** | ❌ **desmarcada** | `01_schema.sql §13` está escrito para eso: `aplicar_rls()` hace los grants a mano para las 25 tablas con `tenant_id`, más cuatro manuales para `tenants`, `profiles`, `caracteristicas` y `bancos`. Dejarla marcada expondría a `anon` cada tabla nueva sin que nadie lo decida — el error que `ADR-001 §4` llama «el error clásico que filtra datos» |
+| Enable automatic RLS | ✅ marcada | Red extra. Las migraciones ya activan RLS tabla por tabla, pero esto cubre las que no pasan por `aplicar_rls` — `_migraciones`, por ejemplo, que la crea el runner en JavaScript y que el gate no vigila |
+
+Y una cosa más antes de desplegar: **Authentication → Sign In / Providers → Email →
+`Minimum password length`**. Los PIN del proyecto son de **6 dígitos**; si ese mínimo está
+por encima de 6, `bootstrap` y el alta de personal fallan con «El PIN es más corto de lo que
+permite Supabase». El valor por defecto de Supabase es 6, así que normalmente **basta con
+comprobarlo, no hay que cambiar nada**.
 
 ### Migraciones versionadas
 
@@ -156,7 +194,7 @@ npm run migrar            # aplica lo pendiente
 
 | Orden | Archivo | Qué hace |
 |---|---|---|
-| 1 | `01_schema.sql` | Tipos, 27 tablas, RLS por `tenant_id` |
+| 1 | `01_schema.sql` | Tipos, 27 tablas, RLS por `tenant_id` (la 28 es `gastos`, de la 12) |
 | 2 | `02_auth_y_auditoria.sql` | Login DNI+PIN, triggers de perfil y JWT, audit log |
 | 3 | `03_logica_negocio.sql` | Tarifas, ventas, check-in, turno, caja |
 | 4 | `04_permisos_service_role.sql` | Permisos para los scripts de servidor |
@@ -169,10 +207,11 @@ npm run migrar            # aplica lo pendiente
 | 11 | `11_cuartos_solo_el_estado.sql` | Quien no es administración solo mueve el estado de un cuarto, no sus datos |
 | 12 | `12_caja_unica_y_gastos.sql` | Una sola caja, `gastos` fijos y justificables, `costo_referencia`, y las alertas conectadas |
 | 13 | `13_turnos_con_caja_unica.sql` | Abrir y cerrar turno contra el saldo único; el conteo de efectivo pasa a ser el saldo |
+| 14 | `14_login_por_hostal.sql` | El login lo resuelve el servidor, acepta el hostal para desambiguar, y el PIN entregado es temporal |
 
 Las cuatro primeras están marcadas como *baseline*: ya estaban aplicadas a mano cuando se adoptó el runner, así que se registraron sin volver a ejecutarlas.
 
-⚠️ **`Database/Supabase.txt` es una copia vieja de `01_schema.sql`. No ejecutar.** El runner la ignora (solo lee `NN_*.sql`).
+El runner solo lee `NN_*.sql`. (Había un `Supabase.txt` con una copia vieja de `01_schema.sql`; se borró: un archivo que nadie debe ejecutar y que parece ejecutable es un arma cargada.)
 
 ### Datos cargados
 
@@ -239,7 +278,7 @@ Dos decisiones al portar, por si chocan con el prototipo:
 cd Backend && npm run prueba:aislamiento
 ```
 
-**87 comprobaciones. Pasa.** Crea un segundo hostal desechable, lo llena con datos en **las 25 tablas con `tenant_id`**, entra como administrador de cada uno con la clave pública (el mismo camino que la app) e intenta cruzar la línea:
+**92 comprobaciones. Pasa.** Crea un segundo hostal desechable, lo llena con datos en **las 25 tablas con `tenant_id`**, entra como administrador de cada uno con la clave pública (el mismo camino que la app) e intenta cruzar la línea:
 
 | Bloque | Qué comprueba |
 |---|---|
@@ -289,7 +328,7 @@ no reventaba porque la fila ya existía de corridas anteriores.
 
 | Gate | Estado |
 |---|---|
-| 1 · RLS activado y testeado, aislamiento cross-tenant | ✅ 87 comprobaciones |
+| 1 · RLS activado y testeado, aislamiento cross-tenant | ✅ 92 comprobaciones |
 | 2 · `service_role` nunca en el cliente | ✅ Solo en scripts de terminal. Al navegador solo va la clave pública, y la prueba confirma que sin JWT no sirve para nada |
 | 3 · Buckets R2 privados + URLs firmadas | ⚠️ Implementado, **sin ejecutar**: no hay cuenta de R2. Ver §9 |
 | 4 · Consentimiento, retención y borrado (Ley 29733) | ⚠️ Igual: el código está, el camino no se ha corrido |
@@ -519,11 +558,68 @@ meter stock sin dinero ya existía `ajuste`, que pide motivo y es de administrac
 
 ---
 
+## 6 quater. El login
+
+### Cómo entra un cliente nuevo
+
+El proveedor corre `bootstrap` **una vez por hostal** y entrega **una sola credencial**: el
+DNI y el PIN del primer administrador. Ese administrador da de alta a su propia gente desde
+**Personas**, con sus PIN y sus roles. El proveedor no administra el personal del cliente.
+
+**El correo se genera del DNI**, como pedía `ADR-001 §2`: `email_de_dni()` produce
+`<dni>@<slug>.hostal.local` y eso es lo que va a Supabase Auth. El personal nunca lo ve.
+
+### Tres cosas que estaban mal, y se probaron antes de tocarlas
+
+**El DNI no decía a qué hostal pertenece.** `resolver_login(dni)` hacía `limit 1` **sin
+`order by`**. Con el mismo DNI en dos hostales —alguien que trabaja en los dos, o un perfil
+viejo que quedó activo— devolvía uno arbitrario, así que **la persona del otro hostal no
+podía entrar nunca**. `profiles` es único por `(tenant_id, dni)` a propósito, así que el
+caso está permitido. Y al no ser determinista, un cambio de plan de Postgres le da la vuelta.
+
+**El login era un oráculo público.** La función estaba concedida a `anon` porque la llamaba
+el navegador con la clave pública, y devolvía el slug. Sin sesión, cualquiera podía preguntar
+«¿existe este DNI?» y le contestaba «sí, trabaja en el hostal X»: dato personal a un
+desconocido (Ley 29733, gate #4) y superficie para enumerar DNIs.
+
+**Nadie podía cambiar su propio PIN.** `cambiarPin` existía en `application/` **sin ruta
+HTTP y sin pantalla** — el mismo patrón que ya había pasado con el tarifario, con el CRUD de
+cuartos y con `reiniciarPin`. En la práctica: el PIN que el proveedor entrega al dar de alta
+un hostal es el que el administrador usa para siempre, y el proveedor lo conoce. Para un
+sistema que guarda la caja del negocio, eso es responsabilidad del proveedor, no del cliente.
+
+### El arreglo
+
+Los tres salen del mismo cambio: **el login lo resuelve el servidor.**
+
+- `resolver_login` pasa a `service_role`, **sin `limit`** y ordenada, y acepta el hostal.
+  Revocada de `anon` y de `authenticated`. `email_de_dni` también sale de `anon`.
+- Si el DNI está en un solo hostal, nada cambia para quien entra. Si está en varios, la
+  respuesta llega con `campo: "hostal"` y **la pantalla de login enseña el campo solo
+  entonces** — pedirlo siempre estorbaría al 99 % de la gente, que trabaja en uno.
+- `profiles.pin_temporal`: lo ponen `bootstrap`, el alta de personal y el reinicio de PIN.
+  Mientras esté arriba, `(sesion)/layout.tsx` **redirige a `/cambiar-pin`** y no se entra a
+  la app. `PATCH /api/auth` cambia el PIN exigiendo el actual y baja la bandera.
+- `/cambiar-pin` vive **fuera** del grupo `(sesion)`, igual que `/login`: dentro se
+  redirigiría a sí misma para siempre.
+
+Los perfiles que ya existían se quedan en `false`: forzar un cambio retroactivo sacaría de
+la app a gente que ya la estaba usando.
+
+### Lo que sigue pendiente aquí
+
+**MFA para administradores.** `ADR-001 §2` lo pide explícitamente («DNI + PIN; MFA para
+admin») y no está. Un PIN de 6 dígitos son un millón de combinaciones; Supabase limita los
+intentos en su endpoint de auth, pero no hay bloqueo por cuenta tras N fallos. Ahora que el
+login lo resuelve el servidor, ese contador se puede añadir sin tocar la base.
+
+---
+
 ## 7. El frontend
 
-**15 vistas**, todas devolviendo 200 con datos reales. Sistema Atlas portado de `design-tokens.css` e `index.html`.
+**16 vistas**, todas devolviendo 200 con datos reales. Sistema Atlas portado de `design-tokens.css` e `index.html`.
 
-`/` panel · `/asistente` · `/habitaciones` · `/checkin` · `/inspeccion` *(las dos, cajón; la ruta queda para enlaces directos)* · `/inventario` · `/caja` · `/limpieza` · `/alertas` · `/huespedes` · **`/reservas`** · `/admin/cuartos` · `/admin/productos` · `/admin/personas` · `/login`
+`/` panel · `/asistente` · `/habitaciones` · `/checkin` · `/inspeccion` *(las dos, cajón; la ruta queda para enlaces directos)* · `/inventario` · `/caja` · `/limpieza` · `/alertas` · `/huespedes` · `/reservas` · `/admin/cuartos` · `/admin/productos` · `/admin/personas` · `/login` · **`/cambiar-pin`**
 
 ### Cómo está montado
 
@@ -620,6 +716,41 @@ conteo · ciclo de lavandería · cierre de turno con justificación obligatoria
 reservas con sus cuatro estados · el asistente por reglas · la vista de piso de limpieza ·
 las guardias de rol · Realtime entre dos navegadores.
 
+### Segunda ronda de validación en navegador (2026-09-01/02)
+
+Recorrido completo por una persona, con los tres roles, sobre lo nuevo. **Todo pasó**, y
+salieron cuatro fallos que ninguna prueba automática había tocado.
+
+| Qué se probó | Resultado |
+|---|---|
+| Alerta de stock mínimo en Panel, Inventario, Alertas y campana | ✅ |
+| Subir el mínimo del agua a 45 → entra en rojo; a 35 → ámbar | ✅ |
+| Rechaza un mínimo mayor que el máximo | ✅ |
+| Inhabilitar un tipo con cuartos activos | ✅ se niega, y dice cuántos |
+| Inhabilitar cuarto → sección «Inhabilitados» → habilitar | ✅ vuelve como Disponible |
+| Habilitar un cuarto cuyo tipo sigue caído | ✅ se niega |
+| Comprar producto: caja −S/ 30, stock +20, sale del mínimo | ✅ |
+| Otro gasto sin justificar | ✅ no deja guardar |
+| Gasto en efectivo mayor que la caja | ✅ se niega; por tarjeta pasa |
+| Sobreprecio con costo de referencia | ✅ alerta en rojo |
+| Cierre con caja descuadrada | ✅ exige justificación, deja incidencia y alerta |
+| Marta: menú de 4, `/caja` rebota, la API le dice «no tienes permiso» | ✅ |
+| Crear usuario, eliminarlo, intentar entrar | ✅ no le permite |
+| Los botones ya no envían el formulario antes de guardar | ✅ |
+
+**Los cuatro fallos que salieron de ahí:**
+
+| Qué se vio | Qué era |
+|---|---|
+| «Reponer» junto a «da para ~105 días» en el mismo aviso | El **mínimo del seed estaba mal**: 20 kits para un producto que se gasta ~2 cada 14 días es pedir stock para 140 días. Bajado a 8. Y en la tarjeta de Alertas los días solo salen si son ≤ 30: una estimación que desmiente al aviso ahí no ayuda |
+| «El único botón que veo es el de eliminar» | La papelera **prometía borrar** algo que solo inhabilita. Cambiada por icono de prohibido, con `title` explicando que vuelve, y la columna se titula «Editar · Inhabilitar» |
+| El costo de compra se guardaba pero no se veía | Faltaba la columna en la tabla de Productos. Añadida junto a «Precio venta», que son dos números distintos |
+| Al cerrar turno se registró **2** cuando se declaró **9** | El código mandaba lo que había en el campo; **la pantalla invitaba al error**: tres números en juego (esperado 11, contado 9, faltante 2) y el campo venía relleno con el esperado. Ahora el recuadro ámbar repite «Contaste S/ 9.00, así que faltan S/ 2.00» y cuando cuadra lo dice en verde |
+
+Y un texto que se colaba: el diálogo de **Comprar** mostraba «Se cobrará S/ 0.00, el precio
+lo calcula el servidor», que es el aviso de **vender**. En una compra el monto lo pone quien
+pagó.
+
 ### Cómo volver a validarlo
 
 Con la base recién sembrada (§2) y un turno abierto desde Caja:
@@ -688,7 +819,95 @@ Las 21 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 
 ---
 
-## 11. Contraste contra los tres documentos de agente
+## 11. Contraste contra los ADR y los documentos de agente
+
+### `ADR-001` — el stack
+
+| Pedido | Estado |
+|---|---|
+| Next.js App Router + TS + Tailwind, PWA | ✅ |
+| Supabase Postgres + RLS por `tenant_id` | ✅ 28/28 |
+| Cloudflare R2, buckets privados + URL firmada | ⚠️ escrito, **nunca ejecutado** (sin cuenta) |
+| Claude Haiku híbrido, server-side, tool-use | ⚠️ escrito, **nunca ejecutado** (sin clave) |
+| Auth DNI + PIN, correo derivado del DNI | ✅ `email_de_dni()` → `<dni>@<slug>.hostal.local` |
+| **MFA para admin** | ❌ **No está.** Lo pide `§2` y otra vez el checklist `§4` |
+| **Web Speech API (voz)** | ❌ No hay entrada de voz |
+| Realtime de estado de cuartos | ✅ |
+| Hosting Cloudflare (alt. Vercel) | ⚠️ se fue a **Render + Vercel** (§15). **Falta un ADR-003**: `CLAUDE.md` no deja editar un ADR aceptado |
+| **Sentry** | ❌ No instalado |
+| Pagos (Culqi/Izipay) · SUNAT (Nubefact) | ❌ Fuera del MVP, el ADR los marca «transversal» |
+
+### `ADR-001 §4` — checklist de seguridad + Ley 29733
+
+| | |
+|---|---|
+| RLS en cada tabla + probar cross-tenant | ✅ 92 comprobaciones |
+| `service_role` fuera del cliente | ✅ |
+| Buckets R2 privados + URL firmada | ⚠️ sin ejecutar |
+| Cifrado a nivel app del nº de documento | ❌ el ADR lo marca «opcional» |
+| **MFA para admins**; rotación de claves | ❌ |
+| Retención + borrado de fotos | ⚠️ `purgar:medios` escrito, sin ejecutar |
+| Consentimiento · sin cámaras en zonas privadas | ✅ |
+| Audit log | ✅ con `origen` |
+| **Documentar región de datos** | ✅ `sa-east-1` (São Paulo), §2 |
+| **Proceso de notificación de brechas** | ❌ el documento no existe |
+
+### `ADR-002` — arquitectura interna
+
+Se cumple entero, y esta ronda lo reforzó: las reglas nuevas —el tope de efectivo, la
+justificación obligatoria, el bloqueo de tipos con cuartos activos, el rol para el catálogo,
+la resolución del login— **viven en SQL**, no en TypeScript. Los contextos crecieron sobre
+lo que lista el ADR (`asistente`, `medios`, `reservas`): crecimiento, no desvío.
+
+### `context.md` — hay una contradicción entre documentos
+
+`context.md §4` dice que la marca es **verde `#1BD96A`**. Pero `design-tokens.css` —que
+`context.md` describe a sí mismo como «fuente de verdad de tokens»— dice
+`--primary-500: #7C4DFF`, morado, y es lo que usan el mockup y la app. **El código sigue la
+fuente correcta**; lo desactualizado es ese párrafo de `context.md`.
+
+### `plan.md`
+
+| | |
+|---|---|
+| Reconciliar ubicación/moneda | ✅ Lima + S/ |
+| Roles por rol + vista simplificada de limpieza | ✅ |
+| Vista Reservas completa | ✅ |
+| Tarifas del check-in desde el tarifario (decisión 2026-08-06) | ✅ |
+| Motor de inventario con auditoría | ✅ |
+| Backend + persistencia + auth | ✅ |
+| IA real | ⚠️ reglas sí, Haiku sin ejecutar |
+| **Onboarding de 30 s** · **segundo plan Premium** · pagos reales | ❌ pendientes |
+| Reportes/analytics | ❌ largo plazo; hay 5 casos de uso escritos sin pantalla (§11 bis) |
+
+---
+
+## 11 bis. Casos de uso escritos sin puerta
+
+Un barrido de exportaciones sin usar encontró **16 casos de uso en `application/` sin ruta
+HTTP y sin nadie que los llame** desde el frontend. No es código que estorbe: es el mismo
+patrón que ya se arregló cinco veces (§«Para retomarlo en frío»).
+
+**Tres producen medias funciones visibles**, y son los que valdría la pena enganchar:
+
+| Función | Lo que se ve hoy |
+|---|---|
+| `marcarParaRevision` / `quitarRevision` | Huéspedes **muestra** «En revisión», pero nada en la app puede ponerlo ni quitarlo. La marca de Laura Gómez vino del `seed` |
+| `reactivarPersona` | Se puede dar de baja a alguien y **nunca reactivarlo** — la asimetría que sí se arregló en cuartos y tipos |
+| `actualizarHuesped` · `actualizarPersona` | Se puede crear y dar de baja, pero **no editar** |
+
+Los otros son reportes e historiales escritos antes de su pantalla: `mapaCuartos`,
+`ingresosPorDia`, `reporteOcupacion`, `auditoriaReciente`, `masVendidos`,
+`historialCierres`, `historialHuesped`, `historialEstados`, `obtenerEstadia`,
+`obtenerHuesped`, `buscarPorDocumento`, `historialInspecciones`, `buscarReserva`.
+`plan.md` pone analytics en largo plazo, así que están adelantados, no sobrando.
+
+**Borrarlos ahora es riesgo sin beneficio.** La decisión razonable es enganchar los tres de
+arriba después de la demo y dejar los demás para cuando exista la vista de Reportes.
+
+---
+
+## 11 ter. Contraste contra los tres documentos de agente
 
 ### `backend.md`
 
@@ -696,9 +915,9 @@ Las 21 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 |---|---|
 | Esquema Postgres completo | ✅ 28 tablas |
 | RLS por `tenant_id` en TODAS + políticas | ✅ 28/28 |
-| **Probar aislamiento cross-tenant** | ✅ 87 comprobaciones, §4 |
+| **Probar aislamiento cross-tenant** | ✅ 92 comprobaciones, §4 |
 | Supabase Auth DNI+PIN, 4 roles | ✅ |
-| Route Handlers tipados | ✅ 19 rutas |
+| Route Handlers tipados | ✅ 22 rutas |
 | `service_role` nunca en el cliente | ✅ |
 | **Migraciones versionadas** | ✅ `_migraciones` + sha256 |
 | **Migrar `ROOMS/INV/GUESTS/STAFF/TURNO/INCIDENCIAS`** | ✅ `TURNO` e `INCIDENCIAS` arrancan vacíos en el prototipo; aquí también |
@@ -739,8 +958,11 @@ Las 21 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 - **`.env.local` de ambas apps está fuera de git.** El backend necesita las claves de Supabase (y las de R2 cuando existan); el front necesita `BACKEND_URL` **y las dos `NEXT_PUBLIC_*` de Supabase** para el Realtime. Sin ellas la app funciona igual, solo pierde el "en vivo".
 - **Next 16 regenera `AGENTS.md` y `CLAUDE.md`** dentro de `Backend/` y `Frontend/` en cada `next dev`.
 - **Git Bash en Windows corrompe los acentos** al pasar JSON inline con `curl -d`. Usar `--data-binary @archivo` o `fetch` de Node.
+- **Un `.single()` sobre `profiles` sin filtrar por id revienta.** El RLS deja ver a todo el personal del hostal, así que con más de una persona devuelve varias filas y `.single()` falla — silenciosamente si el llamador tiene un `?? false`. Pasó con `pin_temporal`.
+- **`bootstrap` acepta banderas sin valor solo si están en la lista `BANDERAS`.** El parser lanza «Falta el valor de --x» para cualquier otra, y eso es a propósito: sin la lista, un `--dni --nombre X` pondría `dni = true` y colaría la validación de obligatorios.
 - **Nada se ha commiteado todavía**: `Backend/`, `Frontend/`, `Database/` y `ADR-002` están sin seguimiento.
 - **La UI ya se validó en Chrome**, módulo por módulo y con los tres roles (§8). Desde este entorno no hay navegador: lo que se verifica aquí es el HTML servido, el CSS generado y los redirects. Los píxeles y el Realtime entre pestañas los mira una persona.
+- **El keep-alive tiene que tocar la base, no solo el servicio.** Render duerme un servicio gratuito a los ~15 min, pero un proyecto Supabase gratuito **se pausa a los 7 días sin actividad**. `/api/salud` solo miraba variables de entorno, así que el ping dejaba el backend caliente y la base dormida. Ahora `?db=1` añade una consulta mínima, y el script sale con código 1 si Postgres no responde. Sin el parámetro no toca la base a propósito: el `healthCheckPath` de Render pega ahí seguido y no debe reiniciar un servicio sano por un hipo de Supabase.
 - **Los scripts de `Database/` se aplican con el runner, nunca a mano.** Editar una migración ya aplicada hace que `npm run migrar` se plante, que es lo que se quiere. Existe `--forzar` para reaplicarla; se usó **una vez**, sobre la 08, minutos después de crearla y con esta base como única que la tenía. Si ya está en otra máquina, la respuesta es una migración nueva, no `--forzar`.
 - **Supabase tipa las relaciones incrustadas como arreglo** aunque sean 1:1: `cuartos(numero)` devuelve `{ numero }` en ejecución pero el tipo dice `{ numero }[]`. Para eso está `shared/supabase/embebido.ts` con `uno()`. Normalizarlo a mano en cada consulta era ruido repetido en tres módulos.
 - **Realtime sin sesión entrega un sobre vacío, no silencio.** `anon` recibe el evento con `new` y `old` en `{}` y `errors: ["Error 401: Unauthorized"]` — el RLS le quitó todas las columnas. Al probar el aislamiento hay que comprobar **que no llegan filas**, no que no llegan mensajes: contar sobres da un falso positivo de fuga.
@@ -756,15 +978,117 @@ Las 21 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 
 ## 13. Siguiente paso recomendado
 
-1. **Commitear.** Nada de esto está en git todavía y ya es mucho trabajo sin respaldo.
-2. **Cuenta de Cloudflare R2** para poder ejecutar el camino de fotos y cerrar los gates #3 y #4 de verdad.
-3. **Cargar crédito en Anthropic** y verificar Haiku cuando haya fecha de demo. Cuesta céntimos, pero es código sin ejecutar.
-4. **Colgar `npm run prueba:aislamiento` de CI.** Sale con código 1 si algo falla; ahí es donde sirve.
-5. Cuando toque decidirlo: **ADR-003 para el proveedor de OCR** (`ADR-001 §8` lo dejó abierto).
+Por orden de riesgo, no de esfuerzo.
+
+1. **Commitear.** Nada de esto está en git y ya es mucho trabajo sin respaldo. Es lo único
+   de la lista que no se puede recuperar.
+2. **Un ADR-003 para el hosting.** `ADR-001` dice Cloudflare y se fue a Render + Vercel.
+   `CLAUDE.md` es explícito: un ADR aceptado no se edita, se abre uno nuevo.
+3. **Programar el keep-alive** en un pinger externo cada ~10 min (§14). Sin eso la demo se
+   cae sola a los 7 días y no por un fallo del código.
+4. **`.env.example` en las dos apps.** Hoy montar esto en otra máquina es leer el código
+   para adivinar qué variables hacen falta.
+5. **CI que corra el gate** contra un **tercer** proyecto Supabase de pruebas — nunca contra
+   la demo ni contra producción, porque crea un hostal con usuarios reales.
+6. **MFA para administradores.** `ADR-001` lo pide dos veces y no está. Ahora que el login
+   lo resuelve el servidor, también cabe ahí un contador de intentos fallidos.
+7. **Sentry.** Sin observabilidad, en producción te enteras de los fallos por WhatsApp del
+   cliente.
+8. **Cuenta de Cloudflare R2 y crédito en Anthropic.** No es desarrollo: son dos cuentas, y
+   cierran los gates #3 y #4 y el camino de Haiku. Las fotos son del **plan básico** según
+   `ADR-001 §3`, así que hoy falta una función prometida.
+9. **La entrada de voz** (Web Speech API). Es lo único de lo que falta del plan básico que
+   depende solo de nosotros: el reconocimiento lo hace el navegador, no hay que hostear nada.
+10. **El proceso de notificación de brechas** que pide `ADR-001 §4`. Es un documento, no
+    código, y sin él el checklist de Ley 29733 no está cerrado.
+11. Cuando toque decidirlo: **ADR-003 para el proveedor de OCR** (`ADR-001 §8` lo dejó
+    abierto). Ojo: si el ADR del hosting se numera 003, este pasa a 004.
+
+### Qué falta del plan básico, concretamente
+
+El **núcleo operativo está terminado y validado**: un hostal puede trabajar con esto hoy.
+Lo que no está cerrado es el plan básico *tal como está documentado*:
+
+| | Falta | Es trabajo de |
+|---|---|---|
+| **Fotos** (`ADR-001 §3`: «todos los planes») | Cuenta de R2 y 4 variables | Media hora de configuración |
+| **Haiku** | Crédito en Anthropic y 1 variable | Céntimos |
+| **Voz** | El código | Poco: Web Speech es del navegador |
+
+Sin las dos primeras, la demo va sin fotos y con el asistente **solo por reglas** — que
+cubre las 9 acciones y degrada bien, pero responde «no entendí» a lo que sale del guion.
+
+## 14. Despliegue — Render (backend) + Vercel (frontend)
+
+`ADR-001` decía Cloudflare. Se fue a Render + Vercel, y **eso pide un ADR-003**: `CLAUDE.md`
+no permite editar un ADR aceptado.
+
+### Lo que ya está montado
+
+`render.yaml` en la raíz. Render hace, por este orden:
+
+```
+1. npm install && npm run build
+2. npm run migrar:nube      (preDeployCommand — en CADA despliegue)
+3. npm run demo:init        (initialDeployHook — una sola vez)
+```
+
+`demo:init` exige `DEMO_HOSTAL_NOMBRE`, `DEMO_HOSTAL_SLUG`, `DEMO_ADMIN_DNI`,
+`DEMO_ADMIN_NOMBRE` y `DEMO_ADMIN_PIN`, y corre `bootstrap --pin-definitivo` seguido de
+`seed`. Con `DEMO_RESEED=1` el seed va con `--limpiar`.
+
+`healthCheckPath` es `/api/salud`, **sin** `?db=1`, a propósito: si el health check
+dependiera de Postgres, un hipo de Supabase haría que Render **reinicie un servicio sano**.
+
+### El keep-alive tiene que despertar las DOS cosas
+
+Render duerme un servicio gratuito a los ~15 minutos, pero un proyecto Supabase gratuito
+**se pausa a los 7 días sin actividad**. `/api/salud` solo mira variables de entorno, así
+que el ping viejo dejaba el backend caliente y la base dormida: la demo aparecía caída sin
+motivo aparente, una semana después.
+
+`?db=1` añade una consulta mínima (`count` en `tenants`, sin traer filas) y devuelve
+`base: { ok, ms }`. `mantener-render-activo.mjs` pega ahí y **sale con código 1 si Postgres
+no responde**, para que el pinger lo reporte como caída en vez de decir «ok».
+
+Probado:
+
+```
+sin parámetro  → {"ok":true,...}                              (no toca la base)
+con ?db=1      → {"ok":true,..., "base":{"ok":true,"ms":383}}
+el script      → Backend y base activos · Postgres respondió en 383 ms
+base caída     → "El backend responde pero la base no" · código de salida 1
+```
+
+**Nada lo programa todavía.** Render free no trae cron, y el cron de Vercel Hobby corre una
+vez al día — insuficiente para un spin-down de 15 minutos. Hace falta un pinger externo
+(cron-job.org, UptimeRobot) cada ~10 min con `RENDER_BACKEND_URL`.
+
+### Lo que hay que tener en cuenta, y no es obvio
+
+- **Render no tiene región en Sudamérica.** Supabase está en `sa-east-1`. Así que
+  **la función de Vercel va en la misma región que Render** (us-east), no en São Paulo: si
+  el front está en São Paulo y el back en Virginia, cada llamada hace São Paulo → Virginia →
+  São Paulo y cruza el ecuador dos veces por clic. Medido desde aquí: la primera consulta a
+  São Paulo tarda ~1500 ms (conexión en frío) y las siguientes ~380 ms.
+- **`BACKEND_URL` y las dos `NEXT_PUBLIC_*` se leen en el BUILD, no en runtime.**
+  `next.config.ts` evalúa los rewrites al construir, y las `NEXT_PUBLIC_*` se incrustan en
+  el bundle. Si se ponen después del primer despliegue, el front apunta a `localhost:3000` y
+  el Realtime muere **sin decir nada**. Ponerlas antes del primer build y **redesplegar** al
+  cambiarlas.
+- **750 horas/mes en Render free** = exactamente un servicio siempre encendido. Con el
+  keep-alive se consume toda la cuota en el backend.
+- **La cookie de sesión cruza el proxy.** El rewrite de Next reenvía el `Set-Cookie` del
+  backend y el navegador la ve como del dominio del front. *Debería* funcionar; es **lo
+  primero que hay que probar** al desplegar: entrar, recargar, y ver que la sesión sigue.
+- **Swagger da 404 en producción** por diseño. Se reabre con `HABILITAR_DOCS=1`.
+- **El proyecto de la demo va aparte del de desarrollo.** El de dev tiene el hostal
+  `zz-prueba-aislamiento` que crea el gate, con dos usuarios de auth reales, y datos movidos
+  a mano. Y **el gate no se corre nunca contra la demo** (§«Para retomarlo en frío»).
 
 ---
 
-## 14. Qué NO está en este documento
+## 15. Qué NO está en este documento
 
 Esto es un traspaso, no una transcripción. Se ha dejado fuera, a propósito:
 

@@ -491,12 +491,59 @@ for (const [fn, params] of FUNCIONES_CERRADAS) {
   comprobar(`anon no puede llamar ${fn}()`, !!error, 'la ejecutó');
 }
 
-const { data: login, error: errorLogin } = await clienteAnon.rpc('resolver_login', { p_dni: A.dni });
+/**
+ * El login ya NO se resuelve desde el navegador.
+ *
+ * Antes `resolver_login` estaba concedida a `anon` porque el front la llamaba con la clave
+ * pública, y eso la convertía en un oráculo: cualquiera sin sesión podía preguntar «¿existe
+ * este DNI?» y le contestaba «sí, trabaja en el hostal X». Dato personal a un desconocido
+ * (Ley 29733) y superficie para enumerar DNIs. Desde la 14 lo resuelve el servidor con
+ * `service_role` y el navegador no la alcanza.
+ */
+for (const params of [{ p_dni: A.dni }, { p_dni: A.dni, p_slug: A.slug }]) {
+  const { error } = await clienteAnon.rpc('resolver_login', params);
+  const con = 'p_slug' in params ? 'con hostal' : 'sin hostal';
+  comprobar(`anon no puede resolver el login (${con})`, !!error, 'lo resolvió');
+}
+
+const { error: errorEmail } = await clienteAnon.rpc('email_de_dni', {
+  p_dni: A.dni,
+  p_slug: A.slug,
+});
+comprobar('anon no puede construir el correo de un DNI', !!errorEmail, 'lo construyó');
+
+// Y el servidor sí, que es quien tiene que poder.
+const { data: login, error: errorLogin } = await admin.rpc('resolver_login', { p_dni: A.dni });
 comprobar(
-  'anon sí puede resolver el login (si no, nadie entraría)',
+  'el servidor sí resuelve el login (si no, nadie entraría)',
   !errorLogin && (login?.length ?? 0) > 0,
   errorLogin?.message ?? 'no devolvió el hostal'
 );
+
+/**
+ * Y no lo resuelve con `limit 1`: con el mismo DNI en dos hostales devolvía uno arbitrario
+ * y la persona del otro no entraba nunca. Ahora devuelve los dos, ordenados.
+ */
+const { data: perfilDuplicado } = await admin
+  .from('profiles').select('id, dni').eq('tenant_id', tenantB).limit(1).single();
+const dniOriginalB = perfilDuplicado.dni;
+await admin.from('profiles').update({ dni: A.dni }).eq('id', perfilDuplicado.id);
+
+const { data: ambos } = await admin.rpc('resolver_login', { p_dni: A.dni });
+comprobar(
+  'con el mismo DNI en dos hostales devuelve los dos, no uno al azar',
+  (ambos?.length ?? 0) === 2,
+  `devolvió ${ambos?.length ?? 0}`
+);
+
+const { data: soloUno } = await admin.rpc('resolver_login', { p_dni: A.dni, p_slug: B.slug });
+comprobar(
+  'y con el hostal indicado devuelve solo ese',
+  (soloUno?.length ?? 0) === 1 && soloUno[0].slug === B.slug,
+  JSON.stringify(soloUno)
+);
+
+await admin.from('profiles').update({ dni: dniOriginalB }).eq('id', perfilDuplicado.id);
 
 // --------------------------------------------------------- 6 · roles
 

@@ -9,6 +9,15 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   const sesion = await miSesion();
   if (!sesion) redirect('/login');
 
+  /**
+   * Con un PIN que puso otra persona no se entra a la app.
+   *
+   * El PIN que el proveedor entrega al dar de alta un hostal, o el que un administrador
+   * reinicia, lo conoce quien lo puso. En un sistema que guarda la caja del negocio eso
+   * no puede quedarse así: se cambia antes de tocar nada. Migración 14.
+   */
+  if (sesion.pinTemporal) redirect('/cambiar-pin');
+
   // Solo para el punto de la campana. Si falla, sale sin punto y ya.
   const [resumen, alertas] = await Promise.all([resumenPanel(), listarAlertas()]);
 

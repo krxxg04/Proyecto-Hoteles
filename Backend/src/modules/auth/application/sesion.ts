@@ -17,17 +17,27 @@ export async function iniciarSesion(
     return fallo(primero.message, String(primero.path[0]));
   }
 
-  const { dni, pin } = parsed.data;
+  const { dni, pin, hostal } = parsed.data;
 
-  const { data: resuelto, error: errorResolver } = await repo.resolverLogin(dni);
-  if (errorResolver) return fallo(traducirError(errorResolver));
+  const { data: coincidencias, error: errorResolver } = await repo.resolverLogin(dni, hostal);
+  if (errorResolver) return fallo('No se pudo verificar tus datos. Inténtalo de nuevo.');
 
   // Mismo mensaje si el DNI no existe o si el PIN está mal: distinguirlos revelaría qué DNI
   // trabaja en el hostal.
   const credencialesInvalidas = 'DNI o PIN incorrectos.';
-  if (!resuelto) return fallo(credencialesInvalidas);
+  const encontradas = coincidencias ?? [];
+  if (encontradas.length === 0) return fallo(credencialesInvalidas);
 
-  const { error: errorLogin } = await repo.entrar(resuelto.email, pin);
+  /**
+   * El mismo DNI puede estar en varios hostales: `profiles` es único por `(tenant_id, dni)`,
+   * a propósito, porque una persona puede trabajar en dos. Antes se resolvía con `limit 1`
+   * y la del segundo hostal no entraba nunca. Ahora se pide el hostal.
+   */
+  if (encontradas.length > 1) {
+    return fallo('Ese DNI está en más de un hostal. Indica en cuál quieres entrar.', 'hostal');
+  }
+
+  const { error: errorLogin } = await repo.entrar(encontradas[0].email, pin);
   if (errorLogin) return fallo(credencialesInvalidas);
 
   const sesion = await sesionActual();
@@ -55,8 +65,17 @@ export async function miSesion(): Promise<Sesion | null> {
   const sesion = await sesionActual();
   if (!sesion) return null;
 
-  const { data: hostal } = await repo.miHostal();
-  return { ...sesion, hostal: hostal?.nombre, plan: hostal?.plan };
+  const [{ data: hostal }, { data: perfil }] = await Promise.all([
+    repo.miHostal(),
+    repo.miPerfilPin(sesion.usuarioId),
+  ]);
+
+  return {
+    ...sesion,
+    hostal: hostal?.nombre,
+    plan: hostal?.plan,
+    pinTemporal: perfil?.pin_temporal ?? false,
+  };
 }
 
 /** Exige el PIN actual: sin eso, una sesión abierta en la tablet bastaría para secuestrar la cuenta. */
@@ -69,14 +88,27 @@ export async function cambiarMiPin(
   const sesion = await sesionActual();
   if (!sesion) return fallo('Tu sesión expiró. Vuelve a iniciar sesión.');
 
-  const { data: resuelto } = await repo.resolverLogin(sesion.dni);
-  if (!resuelto) return fallo('No se pudo verificar tu identidad.');
+  /**
+   * Con sesión abierta el hostal ya se sabe, y hay que pasarlo: el mismo DNI puede estar
+   * en varios, y sin el slug la resolución sería ambigua otra vez. El RLS de `tenants`
+   * limita esta consulta a la propia fila.
+   */
+  const { data: hostal } = await repo.miHostal();
+  if (!hostal?.slug) return fallo('No se pudo verificar tu identidad.');
 
-  const { error: errorVerificar } = await repo.entrar(resuelto.email, parsed.data.pinActual);
+  const { data: coincidencias } = await repo.resolverLogin(sesion.dni, hostal.slug);
+  const yo = (coincidencias ?? [])[0];
+  if (!yo) return fallo('No se pudo verificar tu identidad.');
+
+  const { error: errorVerificar } = await repo.entrar(yo.email, parsed.data.pinActual);
   if (errorVerificar) return fallo('El PIN actual no es correcto.', 'pinActual');
 
   const { error } = await repo.cambiarPin(parsed.data.pinNuevo);
   if (error) return fallo(traducirError(error));
+
+  // El PIN ya es suyo: la app deja de exigirle cambiarlo. Va después a propósito — si la
+  // contraseña no cambió, la bandera se queda arriba.
+  await repo.marcarPinPropio();
 
   return exito(null);
 }

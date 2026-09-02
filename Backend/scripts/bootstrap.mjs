@@ -20,12 +20,21 @@ import { createClient } from '@supabase/supabase-js';
 
 // --------------------------------------------------------------- argumentos
 
+/** Banderas sin valor. Explícitas: si no, un `--dni --nombre X` pondría dni = true y colaría. */
+const BANDERAS = ['pin-definitivo'];
+
 function leerArgs() {
   const args = {};
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i++) {
     if (argv[i].startsWith('--')) {
       const clave = argv[i].slice(2);
+
+      if (BANDERAS.includes(clave)) {
+        args[clave] = true;
+        continue;
+      }
+
       const valor = argv[i + 1];
       if (!valor || valor.startsWith('--')) {
         throw new Error(`Falta el valor de --${clave}`);
@@ -184,6 +193,26 @@ if (errorUsuario) {
     );
     process.exit(1);
   }
+
+  /**
+   * Este PIN lo elige quien da de alta el hostal, o sea el proveedor, no el cliente.
+   * Se marca temporal: la app obliga a cambiarlo en el primer ingreso, y así el PIN que
+   * viaja por WhatsApp deja de ser el PIN definitivo del administrador (migración 14).
+   *
+   * `--pin-definitivo` lo desactiva, y existe solo para la demo pública: ahí las
+   * credenciales se reparten a propósito, y si el primer visitante cambia el PIN deja
+   * fuera a todos los demás.
+   */
+  if (!args['pin-definitivo']) {
+    const { error: errorTemporal } = await admin
+      .from('profiles')
+      .update({ pin_temporal: true })
+      .eq('id', usuario.user.id);
+
+    if (errorTemporal) {
+      console.error('  Aviso: no se pudo marcar el PIN como temporal:', errorTemporal.message);
+    }
+  }
 }
 
 console.log(`
@@ -192,7 +221,7 @@ Listo.
   Hostal:  ${args.hostal}  (slug: ${args.slug})
   Entra con:
     DNI  ${args.dni}
-    PIN  ${args.pin}
+    PIN  ${args.pin}${args['pin-definitivo'] ? '' : '   <- TEMPORAL: la app le pedirá cambiarlo al entrar'}
 
 Pruébalo:
   curl -X POST http://localhost:3000/api/auth \\
