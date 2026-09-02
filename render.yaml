@@ -1,3 +1,15 @@
+# Backend de la demo en el plan GRATUITO de Render.
+#
+# El plan free no corre `preDeployCommand` ni da shell, asi que las migraciones y la
+# carga inicial NO se ejecutan aqui: se corren una vez desde una maquina, apuntando al
+# proyecto Supabase de la demo (ver Backend/.env.demo, fuera de git):
+#
+#   cd Backend
+#   node --env-file=.env.demo scripts/migrar.mjs      # aplica lo pendiente de Database/
+#   node --env-file=.env.demo scripts/demo-init.mjs   # bootstrap + seed
+#
+# Render solo sirve la app, y por eso aqui van solo las 3 variables que necesita en
+# ejecucion. `DATABASE_URL` es del runner de migraciones, no del servidor.
 services:
   - name: hotel-demo-backend
     type: web
@@ -6,13 +18,10 @@ services:
     # Render no tiene region en Sudamerica y Supabase esta en sa-east-1 (Sao Paulo):
     # Virginia es la mas cercana. Oregon cruza el continente. No se cambia despues.
     region: virginia
-    # El plan free no corre preDeployCommand, y sin eso `migrar:nube` no se ejecuta.
-    plan: starter
+    plan: free
     buildCommand: npm install && npm run build
-    preDeployCommand: npm run migrar:nube
     startCommand: npm run start
     healthCheckPath: /api/salud
-    initialDeployHook: npm run demo:init
     envVars:
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
@@ -20,19 +29,3 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: DATABASE_URL
-        sync: false
-      - key: DEMO_HOSTAL_NOMBRE
-        value: Hostal Demo
-      - key: DEMO_HOSTAL_SLUG
-        value: demo
-      - key: DEMO_HOSTAL_CIUDAD
-        value: Lima
-      - key: DEMO_ADMIN_DNI
-        sync: false
-      - key: DEMO_ADMIN_NOMBRE
-        value: Admin Demo
-      - key: DEMO_ADMIN_PIN
-        sync: false
-      - key: DEMO_RESEED
-        value: "0"
