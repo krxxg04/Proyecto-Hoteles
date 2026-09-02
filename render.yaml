@@ -3,6 +3,11 @@ services:
     type: web
     runtime: node
     rootDir: Backend
+    # Render no tiene region en Sudamerica y Supabase esta en sa-east-1 (Sao Paulo):
+    # Virginia es la mas cercana. Oregon cruza el continente. No se cambia despues.
+    region: virginia
+    # El plan free no corre preDeployCommand, y sin eso `migrar:nube` no se ejecuta.
+    plan: starter
     buildCommand: npm install && npm run build
     preDeployCommand: npm run migrar:nube
     startCommand: npm run start
