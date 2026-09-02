@@ -38,7 +38,7 @@ Y en `Backend/package.json`, todos con `--env-file=.env.local` ya puesto:
 |---|---|
 | `npm run migrar` | Aplica lo pendiente de `Database/` |
 | `npm run migrar:estado` | Solo informa: qué hay aplicado, qué falta, qué se alteró |
-| `npm run prueba:aislamiento` | **El gate.** 83 comprobaciones; sale con código 1 si falla |
+| `npm run prueba:aislamiento` | **El gate.** 87 comprobaciones; sale con código 1 si falla |
 | `npm run seed -- --slug aurora` | Los datos del prototipo (`--limpiar` borra y recarga) |
 | `npm run bootstrap -- ...` | Alta de un hostal nuevo con su primer administrador |
 | `npm run purgar:medios` | Borra las fotos vencidas (`--simular` para ver qué se iría) |
@@ -140,7 +140,7 @@ Entrar en <http://localhost:3001>. Usuarios cargados (§2):
 
 ## 2. Base de datos
 
-Proyecto Supabase `hostal-atlas-dev`. **27 tablas · RLS activo en las 27 · aislamiento probado (§4).**
+Proyecto Supabase `hostal-atlas-dev`. **28 tablas · RLS activo en las 28 · aislamiento probado (§4).**
 
 ### Migraciones versionadas
 
@@ -167,6 +167,8 @@ npm run migrar            # aplica lo pendiente
 | 9 | `09_esperado_no_negativo.sql` | El conteo de cierre no puede esperar menos de cero |
 | 10 | `10_stock_minimo_y_bajas.sql` | `productos.stock_min`, bajas reversibles de cuartos y tipos, catálogo solo para administración |
 | 11 | `11_cuartos_solo_el_estado.sql` | Quien no es administración solo mueve el estado de un cuarto, no sus datos |
+| 12 | `12_caja_unica_y_gastos.sql` | Una sola caja, `gastos` fijos y justificables, `costo_referencia`, y las alertas conectadas |
+| 13 | `13_turnos_con_caja_unica.sql` | Abrir y cerrar turno contra el saldo único; el conteo de efectivo pasa a ser el saldo |
 
 Las cuatro primeras están marcadas como *baseline*: ya estaban aplicadas a mano cuando se adoptó el runner, así que se registraron sin volver a ejecutarlas.
 
@@ -224,6 +226,10 @@ Dos decisiones al portar, por si chocan con el prototipo:
 | El **estado** de un cuarto no se edita desde `/admin/cuartos` | `VistaCuartosAdmin` | Lo mueve `cambiar_estado_cuarto()`, que audita quién fue y corta por rol. Editarlo ahí sería un `UPDATE` sin registro |
 | Las fechas se formatean a mano, no con `toLocaleString` | `shared/ui/fechas.ts` | El ICU de Node y el del navegador no ponen el mismo espacio duro, y sin `timeZone` el servidor de producción formatea en UTC: cinco horas de diferencia |
 | `Boton` y `Pildora` son `type="button"` por defecto | `primitivos.tsx` | Dentro de un `<form>`, un botón sin `type` es `submit`. Siete controles enviaban el formulario al hacer clic |
+| **Una sola caja**, sin sencillo ni caja chica | `12_caja_unica_y_gastos.sql` | Lo pidió el hostal. El cierre cuenta el efectivo y eso pasa a ser el saldo; el reparto ya no se decide |
+| **Comprar siempre mueve dinero Y stock** | `registrar_gasto()` | «Agregar» sin dinero deja tapar un faltante: el kardex suma y la caja no se mueve. Para eso está `ajuste`, con motivo |
+| El gasto **no** descuenta el saldo al registrarse | `12_caja_unica_y_gastos.sql` | Lo fija el conteo de cierre, igual que las ventas. Dos sitios que muevan el saldo son dos verdades |
+| El tope de efectivo es **solo para efectivo** | `registrar_gasto()` | Por yape o tarjeta el dinero no sale del cajón, así que no hay nada que topar |
 
 ---
 
@@ -233,7 +239,7 @@ Dos decisiones al portar, por si chocan con el prototipo:
 cd Backend && npm run prueba:aislamiento
 ```
 
-**83 comprobaciones. Pasa.** Crea un segundo hostal desechable, lo llena con datos en **las 24 tablas con `tenant_id`**, entra como administrador de cada uno con la clave pública (el mismo camino que la app) e intenta cruzar la línea:
+**87 comprobaciones. Pasa.** Crea un segundo hostal desechable, lo llena con datos en **las 25 tablas con `tenant_id`**, entra como administrador de cada uno con la clave pública (el mismo camino que la app) e intenta cruzar la línea:
 
 | Bloque | Qué comprueba |
 |---|---|
@@ -269,6 +275,13 @@ fila con `service_role` en vez de mirar si hubo error: en UPDATE y DELETE el RLS
 pasar una fila **no lanza error**, simplemente no afecta ninguna. Contar el error habría
 dado un falso verde.
 
+**Y el bloque 0 tenía su propio agujero.** Contrastaba la lista de tablas contra
+`01_schema.sql` *solo*, así que una tabla nacida en una migración posterior no existía para
+él: `gastos` llegó en la 12 y el gate seguía diciendo «las 24 tablas están cubiertas» tan
+tranquilo. Ahora lee **todas** las migraciones de `Database/`. Al arreglarlo salió también
+que el fixture sembraba `caja_estado` con dos columnas que la 12 había borrado, y que solo
+no reventaba porque la fila ya existía de corridas anteriores.
+
 
 **`anon` podía ejecutar `current_tenant_id()`.** `01_schema.sql §12` hacía `revoke execute ... from anon`, pero Postgres otorga EXECUTE al rol `public` por defecto y `anon` hereda de `public`: revocarle algo que tiene por herencia no quita nada. No era una fuga —sin JWT la función devuelve null— pero el resto de las funciones de negocio quedaban igual de expuestas. Arreglado en `06_ejecucion_de_funciones.sql`, que revoca a `public`, otorga a `authenticated` y deja `resolver_login` como única excepción para `anon`.
 
@@ -276,7 +289,7 @@ dado un falso verde.
 
 | Gate | Estado |
 |---|---|
-| 1 · RLS activado y testeado, aislamiento cross-tenant | ✅ 83 comprobaciones |
+| 1 · RLS activado y testeado, aislamiento cross-tenant | ✅ 87 comprobaciones |
 | 2 · `service_role` nunca en el cliente | ✅ Solo en scripts de terminal. Al navegador solo va la clave pública, y la prueba confirma que sin JWT no sirve para nada |
 | 3 · Buckets R2 privados + URLs firmadas | ⚠️ Implementado, **sin ejecutar**: no hay cuenta de R2. Ver §9 |
 | 4 · Consentimiento, retención y borrado (Ley 29733) | ⚠️ Igual: el código está, el camino no se ha corrido |
@@ -432,6 +445,77 @@ rechazan lo que no le toca.
 
 Hubo una tabla de capacidades en `/admin/personas` y **se quitó a pedido**: la prueba real es
 recorrer la app con cada rol, no un cuadro que hay que mantener al día a mano.
+
+---
+
+## 6 ter. La caja y los gastos
+
+Lo pidió el hostal al final: **una sola caja**, **gastos fijos y justificables**, y que
+cualquier cosa que no encaje dispare una alarma.
+
+### Lo que no existía
+
+**Comprar no tocaba el dinero.** `movimientos_inventario` no tiene columna de monto: una
+compra movía stock y nada más. El gasto no existía en el modelo, así que «Comprar» en
+Inventario estaba mintiendo desde el primer día.
+
+**Había dos cajas**, `sencillo` y `caja_chica`, y el cierre repartía el efectivo entre las dos.
+
+**Y la tabla `alertas` la escribía `cerrar_turno` sin que nadie la leyera nunca.** Existía
+desde el primer esquema; la pantalla de Alertas mostraba `incidencias`. Meses de avisos en un
+pozo. Ahora es donde caen los gastos raros.
+
+### Una sola caja
+
+`caja_estado.saldo`, y las dos columnas viejas se fueron. El cierre ya no pregunta «cuánto
+sencillo dejas»: pregunta **cuánto efectivo hay**, lo compara contra
+`apertura + ventas en efectivo − gastos en efectivo`, y **lo contado pasa a ser el saldo**.
+Sale más simple que el reparto que había, y trata el dinero igual que el inventario.
+
+### Gastos fijos y justificables
+
+| | Fijo | Justificable |
+|---|---|---|
+| Qué es | Comprar un producto **del catálogo** | Cualquier otra cosa: escobas, un plomero, un foco |
+| Llena inventario | Sí, en la misma operación | No hay producto que mover |
+| Justificación | No: es una compra conocida | **Obligatoria.** La base no acepta lo contrario |
+| Alarma | Solo si se pasa del precio de referencia | **Siempre** |
+
+Las cuatro reglas viven en `registrar_gasto()`, no en TypeScript:
+
+- **Sin turno abierto no se gasta**: no hay caja de la que salga el dinero.
+- **Un gasto en efectivo no puede superar lo que hay en la caja.** Ataja también el dedo
+  gordo: S/ 4000 en vez de S/ 40 se rechaza en el momento, no al cerrar. El tope es solo
+  para el efectivo — por yape o tarjeta pasa, porque ahí no sale del cajón.
+- **Un fijo exige producto y cantidad**; un justificable exige concepto y razón, y no
+  admite `producto_id` (eso sería un fijo mal clasificado).
+- **Sobreprecio**: si un fijo se pasa del 30 % sobre `costo_referencia × cantidad`, alerta.
+  El margen es `margen_gasto()`, una función, para poder tocarlo sin buscarlo en el medio de
+  la lógica. Con referencia en 0 no hay control de precio.
+
+El gasto **no descuenta el saldo al registrarse**. Igual que las ventas: el saldo lo fija el
+conteo de cierre. Dos sitios que muevan el saldo son dos verdades.
+
+### «Comprar», no «Agregar»
+
+Se planteó poner *Agregar* en Inventario (solo stock) y *Comprar* en Caja (dinero y stock).
+Se descartó: **«Agregar» sin dinero es la puerta por la que se tapa un faltante** — el kardex
+dice que entró stock, la caja nunca se movió, y el conteo de cierre cuadra sin que nadie haya
+comprado nada.
+
+Así que hay **un solo concepto, «Comprar»**, que siempre mueve dinero y stock juntos, con dos
+puertas: desde Inventario (donde se ve que falta) y desde Caja (donde se ve el dinero). Para
+meter stock sin dinero ya existía `ajuste`, que pide motivo y es de administración.
+
+### Dónde se ve
+
+- **Caja**: tarjeta de efectivo actual con su cuenta a la vista, tarjeta de gastado, lista de
+  los gastos del turno con su justificación, y los dos botones.
+- **Inventario**: *Comprar* pide monto y medio de pago, con el precio de referencia como
+  marca de agua.
+- **Alertas**: sección **«Requieren tu revisión»** con las alertas del sistema y su botón de
+  *Revisada*.
+- **Productos**: campo de costo de referencia por unidad.
 
 ---
 
@@ -596,11 +680,11 @@ Dónde se usa: foto de la inspección, y foto del documento en la pantalla de co
 
 ## 10. Superficie del backend
 
-**20 rutas** en `Backend/src/app/api/`. `GET /api/cuartos?id=` devuelve el detalle que llena el panel lateral; `POST` da de alta o edita un cuarto y `DELETE` inhabilita o vuelve a habilitar cuartos y tipos. `POST /api/productos` con `id` edita. **Swagger en <http://localhost:3000/docs>** (404 en producción; se reabre con `HABILITAR_DOCS=1`).
+**22 rutas** en `Backend/src/app/api/` — se sumaron `gastos` y `alertas`. `GET /api/cuartos?id=` devuelve el detalle que llena el panel lateral; `POST` da de alta o edita un cuarto y `DELETE` inhabilita o vuelve a habilitar cuartos y tipos. `POST /api/productos` con `id` edita. **Swagger en <http://localhost:3000/docs>** (404 en producción; se reabre con `HABILITAR_DOCS=1`).
 
-`salud` · `auth` · `asistente` · `panel` · `cuartos` · `productos` · `inventario` · `aseo` · `huespedes` · `checkin` · **`inspecciones`** · **`reservas`** · **`medios`** · **`catalogos`** · **`tarifa`** · `ventas` · `turno` · `incidencias` · `personal` · `openapi`
+`salud` · `auth` · `asistente` · `panel` · `cuartos` · `productos` · `inventario` · `aseo` · `huespedes` · `checkin` · `inspecciones` · `reservas` · `medios` · `catalogos` · `tarifa` · `ventas` · `turno` · `incidencias` · `personal` · **`gastos`** · **`alertas`** · `openapi`
 
-Las 19 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no se documenta a sí misma). Al tocar una ruta hay que actualizarlo en el mismo commit.
+Las 21 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no se documenta a sí misma). Al tocar una ruta hay que actualizarlo en el mismo commit.
 
 ---
 
@@ -610,9 +694,9 @@ Las 19 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 
 | Pedido | Estado |
 |---|---|
-| Esquema Postgres completo | ✅ 27 tablas |
-| RLS por `tenant_id` en TODAS + políticas | ✅ 27/27 |
-| **Probar aislamiento cross-tenant** | ✅ 83 comprobaciones, §4 |
+| Esquema Postgres completo | ✅ 28 tablas |
+| RLS por `tenant_id` en TODAS + políticas | ✅ 28/28 |
+| **Probar aislamiento cross-tenant** | ✅ 87 comprobaciones, §4 |
 | Supabase Auth DNI+PIN, 4 roles | ✅ |
 | Route Handlers tipados | ✅ 19 rutas |
 | `service_role` nunca en el cliente | ✅ |
@@ -660,6 +744,9 @@ Las 19 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 - **Los scripts de `Database/` se aplican con el runner, nunca a mano.** Editar una migración ya aplicada hace que `npm run migrar` se plante, que es lo que se quiere. Existe `--forzar` para reaplicarla; se usó **una vez**, sobre la 08, minutos después de crearla y con esta base como única que la tenía. Si ya está en otra máquina, la respuesta es una migración nueva, no `--forzar`.
 - **Supabase tipa las relaciones incrustadas como arreglo** aunque sean 1:1: `cuartos(numero)` devuelve `{ numero }` en ejecución pero el tipo dice `{ numero }[]`. Para eso está `shared/supabase/embebido.ts` con `uno()`. Normalizarlo a mano en cada consulta era ruido repetido en tres módulos.
 - **Realtime sin sesión entrega un sobre vacío, no silencio.** `anon` recibe el evento con `new` y `old` en `{}` y `errors: ["Error 401: Unauthorized"]` — el RLS le quitó todas las columnas. Al probar el aislamiento hay que comprobar **que no llegan filas**, no que no llegan mensajes: contar sobres da un falso positivo de fuga.
+- **El `AND` de SQL no hace short-circuit.** `if categoria = 'fijo' and v_producto.costo_referencia > 0` evalúa las dos partes, y en un gasto justificable `v_producto` nunca se asignó: «record not assigned yet». Hay que anidar los `if`, no encadenar con `and`.
+- **Toda tabla nueva con FK `on delete restrict` hay que añadirla a `EN_ORDEN` del seed.** Pasó con `turno_conteos` y volvió a pasar con `gastos`, que apunta a `turnos` Y a `productos`. Si no, `--limpiar` revienta al borrar turnos.
+- **Y hay que añadirla a `TABLAS` del gate.** El bloque 0 lo avisa, pero solo desde que lee todas las migraciones y no solo `01_schema.sql`.
 - **En UPDATE y DELETE, el RLS que bloquea no lanza error**: simplemente no afecta ninguna fila. Para comprobar que algo quedó protegido hay que **volver a leer la fila** con `service_role`; mirar `error` da un falso verde. Es lo que escondía los dos agujeros de §4.
 - **Un `<button>` sin `type` dentro de un `<form>` es `submit`.** Lo vigila `react/button-has-type` en el eslint del front, activado a propósito: es un fallo que no se ve leyendo el código y que en Inventario cobraba una venta al elegir el medio de pago.
 - **`toLocaleString` rompe la hidratación** y, peor, formatea en la zona del servidor. Todo el formato de fechas pasa por `shared/ui/fechas.ts`, que fija `America/Lima` y arma el texto a mano. No volver a llamar a `toLocale*` en componentes.

@@ -40,7 +40,7 @@ export function VistaProductosAdmin({ productos }: { productos: Producto[] }) {
 
       {error && <ErrorCaja mensaje={error} />}
 
-      <Tabla columnas={['Producto', 'Categoría', 'Clase', 'Stock', 'Avisar bajo', 'Precio', '']}>
+      <Tabla columnas={['Producto', 'Categoría', 'Clase', 'Stock', 'Avisar bajo', 'Costo compra', 'Precio venta', '']}>
         {productos.map((p) => (
           <Fila key={p.id}>
             <Celda className="font-medium">{p.nombre}</Celda>
@@ -68,6 +68,13 @@ export function VistaProductosAdmin({ productos }: { productos: Producto[] }) {
                 </span>
               ) : (
                 <span className="text-tx-dis">sin aviso</span>
+              )}
+            </Celda>
+            <Celda className="tabular-nums" oculta="md">
+              {p.costo_referencia > 0 ? (
+                <span className="text-tx-sec">{soles(p.costo_referencia)}</span>
+              ) : (
+                <span className="text-tx-dis">sin control</span>
               )}
             </Celda>
             <Celda className="tabular-nums text-tx-sec">
@@ -137,6 +144,7 @@ function DialogoProducto({
     producto?.clase ?? 'descartable'
   );
   const [precio, setPrecio] = useState(String(producto?.precio ?? 0));
+  const [costoRef, setCostoRef] = useState(String(producto?.costo_referencia ?? 0));
   const [error, setError] = useState<string | null>(null);
   const [campo, setCampo] = useState<string | undefined>();
   const [enviando, empezar] = useTransition();
@@ -155,6 +163,7 @@ function DialogoProducto({
         categoria,
         clase,
         precio: Number(precio),
+        costo_referencia: Number(costoRef),
       });
       if (!r.ok) {
         setError(r.error);
@@ -254,6 +263,22 @@ function DialogoProducto({
               error={campo === 'precio' ? error ?? undefined : undefined}
             />
           )}
+
+          <div className="rounded-lg bg-surf hair p-3">
+            <Campo
+              etiqueta="Cuánto cuesta comprar una unidad (S/)"
+              type="number"
+              step="0.10"
+              min="0"
+              value={costoRef}
+              onChange={(e) => setCostoRef(e.target.value)}
+              error={campo === 'costo_referencia' ? error ?? undefined : undefined}
+            />
+            <p className="mt-1.5 text-[12px] text-tx-muted">
+              Lo que suele pagarse al proveedor. Si una compra se pasa mucho de aquí, queda una
+              alerta. 0 = sin control de precio.
+            </p>
+          </div>
 
           {error && !campo && <ErrorCaja mensaje={error} />}
 

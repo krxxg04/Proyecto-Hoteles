@@ -35,10 +35,24 @@ export async function estadoCaja(): Promise<Resultado<EstadoCaja>> {
 
   const t = turno as (Turno & { profiles: { nombre: string } | null }) | null;
 
+  // Lo que debería haber en la caja ahora mismo. Sin turno abierto es el saldo, sin más.
+  const saldo = Number(caja?.saldo ?? 0);
+  let esperado = saldo;
+  let gastos = 0;
+
+  if (t) {
+    const { data: efectivo } = await repo.efectivoEsperado(t.id);
+    esperado = Number(efectivo ?? 0);
+
+    const { data: filas } = await repo.buscarGastos(t.id);
+    gastos = (filas ?? []).reduce((suma, g) => suma + Number((g as { monto: number }).monto), 0);
+  }
+
   return exito({
     turno: t ? ({ ...t, profiles: undefined } as unknown as Turno) : null,
-    sencillo_esperado: Number(caja?.sencillo ?? 0),
-    caja_chica: Number(caja?.caja_chica ?? 0),
+    saldo,
+    efectivo_esperado: esperado,
+    gastos_turno: gastos,
     usuario: t?.profiles?.nombre ?? null,
     es_de_otro: !!t && t.usuario_id !== sesion.usuarioId,
   });
@@ -70,7 +84,8 @@ export async function cerrarTurno(
 
   const { data, error } = await repo.cerrar({
     conteos: parsed.data.conteos,
-    sencillo_dejar: parsed.data.sencillo_dejar,
+    efectivo_contado: parsed.data.efectivo_contado,
+    justificacion_caja: parsed.data.justificacion_caja ?? null,
     ajuste_monto: parsed.data.ajuste_monto ?? null,
     ajuste_razon: parsed.data.ajuste_razon ?? null,
   });

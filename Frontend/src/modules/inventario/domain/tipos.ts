@@ -10,6 +10,8 @@ export type Producto = {
   categoria: 'insumo' | 'vendible';
   clase: 'descartable' | 'no_descartable';
   precio: number;
+  /** Lo que suele costar comprar una unidad. 0 = sin referencia. */
+  costo_referencia: number;
   activo: boolean;
   /** % de llenado respecto al máximo. */
   nivel: number;

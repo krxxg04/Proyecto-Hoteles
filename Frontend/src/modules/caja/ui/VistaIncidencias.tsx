@@ -2,13 +2,15 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, PackageOpen, TriangleAlert } from 'lucide-react';
-import type { Incidencia } from '../domain/tipos';
+import { Check, PackageOpen, ShieldAlert, TriangleAlert } from 'lucide-react';
+import type { Alerta, Incidencia } from '../domain/tipos';
 import type { ProductoEnAviso } from '@/modules/reportes/domain/tipos';
-import { revisarIncidencia } from '../infrastructure/acciones';
+import { atenderAlerta, revisarIncidencia } from '../infrastructure/acciones';
 import { Boton, Card, Chip, ErrorCaja, Pildora, Vacio } from '@/shared/ui/primitivos';
 import { EncabezadoSeccion } from '@/shared/ui/tabla';
 import { fechaYHora } from '@/shared/ui/fechas';
+
+const TONO_SEVERIDAD = { info: 'info', warning: 'warning', danger: 'danger' } as const;
 
 /**
  * Descuadres del cierre de turno.
@@ -68,12 +70,75 @@ function AvisosDeStock({ productos }: { productos: ProductoEnAviso[] }) {
   );
 }
 
+/**
+ * Las alertas del sistema: gastos fuera de lo habitual, sobreprecios y cajas que no cuadran.
+ *
+ * La tabla `alertas` existía desde el primer esquema y nadie la leía: `cerrar_turno`
+ * escribía en ella y ahí se quedaba. Aquí se ve por primera vez.
+ */
+function AlertasDelSistema({
+  alertas,
+  onAtender,
+  ocupado,
+}: {
+  alertas: Alerta[];
+  onAtender: (id: string) => void;
+  ocupado: boolean;
+}) {
+  if (alertas.length === 0) return null;
+
+  return (
+    <section>
+      <EncabezadoSeccion
+        titulo="Requieren tu revisión"
+        subtitulo={
+          alertas.length === 1
+            ? '1 movimiento se salió de lo normal'
+            : `${alertas.length} movimientos se salieron de lo normal`
+        }
+      />
+      <div className="flex flex-col gap-2">
+        {alertas.map((a) => (
+          <Card key={a.id}>
+            <div className="flex items-start gap-3">
+              <ShieldAlert
+                className="mt-0.5 size-[18px] shrink-0"
+                style={{ color: a.severidad === 'danger' ? '#EF4444' : '#F59E0B' }}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[14px] font-semibold">{a.titulo}</p>
+                  <Chip tono={TONO_SEVERIDAD[a.severidad]}>
+                    {a.origen === 'caja' ? 'caja' : a.origen ?? 'sistema'}
+                  </Chip>
+                </div>
+                {a.detalle && (
+                  <p className="mt-1.5 rounded-md bg-bg-ter px-3 py-2 text-[12.5px] text-tx-sec">
+                    {a.detalle}
+                  </p>
+                )}
+                <p className="mt-1.5 text-[11.5px] text-tx-muted">{fechaYHora(a.created_at)}</p>
+              </div>
+              <Boton variante="secundario" disabled={ocupado} onClick={() => onAtender(a.id)}>
+                <Check className="size-4" />
+                Revisada
+              </Boton>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function VistaIncidencias({
   incidencias,
   bajoMinimo = [],
+  alertas = [],
 }: {
   incidencias: Incidencia[];
   bajoMinimo?: ProductoEnAviso[];
+  alertas?: Alerta[];
 }) {
   const router = useRouter();
   const [filtro, setFiltro] = useState<'abiertas' | 'todas'>('abiertas');
@@ -92,8 +157,18 @@ export function VistaIncidencias({
     });
   }
 
+  function atender(id: string) {
+    setError(null);
+    empezar(async () => {
+      const r = await atenderAlerta(id);
+      if (!r.ok) setError(r.error);
+      else router.refresh();
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      <AlertasDelSistema alertas={alertas} onAtender={atender} ocupado={ocupado} />
       <AvisosDeStock productos={bajoMinimo} />
 
       <section className="flex flex-col gap-4">

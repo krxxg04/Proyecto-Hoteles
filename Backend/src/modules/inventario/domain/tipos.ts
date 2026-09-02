@@ -22,6 +22,8 @@ export type Producto = {
   categoria: CategoriaProducto;
   clase: ClaseProducto;
   precio: number;
+  /** Lo que suele costar comprar una unidad. 0 = sin referencia. */
+  costo_referencia: number;
   activo: boolean;
 };
 

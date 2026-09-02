@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { miSesion } from '@/modules/auth/infrastructure/lecturas';
 import { resumenPanel } from '@/modules/reportes/infrastructure/lecturas';
+import { listarAlertas } from '@/modules/caja/infrastructure/lecturas';
 import { Chasis } from '@/shared/ui/Chasis';
 
 /** Todo lo de dentro exige sesión. El proxy ya corta antes, esto es la segunda red. */
@@ -9,15 +10,19 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   if (!sesion) redirect('/login');
 
   // Solo para el punto de la campana. Si falla, sale sin punto y ya.
-  const resumen = await resumenPanel();
+  const [resumen, alertas] = await Promise.all([resumenPanel(), listarAlertas()]);
+
+  /**
+   * Las tres cosas que se atienden desde Alertas, en un solo número: descuadres sin
+   * revisar, productos bajo su mínimo y movimientos raros de caja. Contar solo dos dejaba
+   * un gasto justificable visible en la pantalla pero sin encender la campana.
+   */
+  const porAtender =
+    (resumen.ok ? resumen.datos.incidenciasAbiertas + resumen.datos.bajoMinimo.length : 0) +
+    (alertas.ok ? alertas.datos.length : 0);
 
   return (
-    <Chasis
-      sesion={sesion}
-      incidenciasAbiertas={
-        resumen.ok ? resumen.datos.incidenciasAbiertas + resumen.datos.bajoMinimo.length : 0
-      }
-    >
+    <Chasis sesion={sesion} incidenciasAbiertas={porAtender}>
       {children}
     </Chasis>
   );

@@ -11,6 +11,7 @@ export const ProductoSchema = z
     categoria: z.enum(CATEGORIAS_PRODUCTO),
     clase: z.enum(CLASES_PRODUCTO),
     precio: z.coerce.number().min(0, 'El precio no puede ser negativo'),
+    costo_referencia: z.coerce.number().min(0, 'El costo no puede ser negativo').default(0),
   })
   .refine((d) => d.categoria !== 'vendible' || d.precio > 0, {
     message: 'Un producto vendible necesita precio',

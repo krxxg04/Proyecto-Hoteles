@@ -754,6 +754,12 @@ export const documentoOpenAPI = {
               default: 0,
               description: 'Avisar cuando el stock baje de aquí. 0 = sin aviso. Menor que `stock_max`.',
             },
+            costo_referencia: {
+              type: 'number',
+              minimum: 0,
+              default: 0,
+              description: 'Lo que suele costar comprar UNA unidad. Una compra que se pase del 30 % deja alerta. 0 = sin control.',
+            },
             categoria: { type: 'string', enum: [...CATEGORIAS_PRODUCTO] },
             clase: { type: 'string', enum: [...CLASES_PRODUCTO] },
             precio: { ...Dinero, minimum: 0, description: 'Obligatorio (> 0) si es `vendible`.' },
@@ -782,6 +788,102 @@ export const documentoOpenAPI = {
           required: ['id'],
         }),
         responses: respuesta('Producto dado de baja.', { type: 'null' }),
+      },
+    },
+
+    '/api/gastos': {
+      get: {
+        tags: ['Turno y caja'],
+        summary: 'Gastos del turno abierto',
+        parameters: [
+          {
+            name: 'todos',
+            in: 'query',
+            description: 'Cualquier valor no vacío trae el histórico, no solo el turno abierto.',
+            schema: { type: 'string' },
+            example: '1',
+          },
+        ],
+        responses: respuesta('Gastos, del más reciente al más antiguo.', {
+          type: 'array',
+          items: { $ref: '#/components/schemas/Gasto' },
+        }),
+      },
+      post: {
+        tags: ['Turno y caja'],
+        summary: 'Registrar un gasto de la caja',
+        description: [
+          'Administración y recepción. Exige turno abierto: sin turno no hay caja de la que salga el dinero.',
+          '',
+          '| Categoría | Qué pide | Qué hace |',
+          '|---|---|---|',
+          '| `fijo` | `producto_id` + `cantidad` | descuenta de la caja **y llena el inventario** |',
+          '| `justificable` | `concepto` + `justificacion` | descuenta de la caja y **siempre deja alerta** |',
+          '',
+          'Un gasto en efectivo no puede superar lo que hay en la caja. Un `fijo` que se pase',
+          'del 30 % sobre `costo_referencia` deja alerta de sobreprecio.',
+        ].join('\n'),
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: {
+            categoria: { type: 'string', enum: ['fijo', 'justificable'] },
+            concepto: { type: 'string', maxLength: 200, description: 'Obligatorio en `justificable`.' },
+            monto: { ...Dinero, exclusiveMinimum: 0, description: 'Lo pagado en total.' },
+            medio: { type: 'string', enum: [...MEDIOS_PAGO], default: 'efectivo' },
+            producto_id: { ...Uuid, description: 'Solo en `fijo`.' },
+            cantidad: { type: 'number', exclusiveMinimum: 0, description: 'Solo en `fijo`.' },
+            justificacion: {
+              type: 'string',
+              maxLength: 500,
+              description: 'Obligatoria en `justificable`, mínimo 3 caracteres.',
+            },
+          },
+          required: ['categoria', 'monto'],
+          example: {
+            categoria: 'justificable',
+            concepto: 'Escobas y recogedor',
+            monto: 40,
+            medio: 'efectivo',
+            justificacion: 'Se rompieron las dos del segundo piso',
+          },
+        }),
+        responses: respuesta('Gasto registrado.', {
+          type: 'object',
+          properties: { gasto_id: Uuid },
+        }),
+      },
+    },
+
+    '/api/alertas': {
+      get: {
+        tags: ['Incidencias'],
+        summary: 'Alertas del sistema',
+        description:
+          'Gastos fuera de lo habitual, sobreprecios y cajas que no cuadran. Distinto de `/api/incidencias`, que son los descuadres con conteo.',
+        parameters: [
+          {
+            name: 'todas',
+            in: 'query',
+            description: 'Cualquier valor no vacío incluye las ya atendidas.',
+            schema: { type: 'string' },
+            example: '1',
+          },
+        ],
+        responses: respuesta('Alertas, de la más reciente a la más antigua.', {
+          type: 'array',
+          items: { $ref: '#/components/schemas/Alerta' },
+        }),
+      },
+      patch: {
+        tags: ['Incidencias'],
+        summary: 'Marcar una alerta como revisada',
+        description: '«Atendida» significa que una persona la miró y decidió, no que se resolviera sola.',
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: { id: Uuid },
+          required: ['id'],
+        }),
+        responses: respuesta('Alerta atendida.', { type: 'null' }),
       },
     },
 
@@ -1092,6 +1194,35 @@ export const documentoOpenAPI = {
 
   components: {
     schemas: {
+      Gasto: {
+        type: 'object',
+        properties: {
+          id: Uuid,
+          categoria: { type: 'string', enum: ['fijo', 'justificable'] },
+          producto_id: { ...Uuid, nullable: true },
+          cantidad: { type: 'number', nullable: true },
+          concepto: { type: 'string' },
+          monto: Dinero,
+          medio: { type: 'string', enum: [...MEDIOS_PAGO] },
+          justificacion: { type: 'string', nullable: true },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
+
+      Alerta: {
+        type: 'object',
+        properties: {
+          id: Uuid,
+          severidad: { type: 'string', enum: ['info', 'warning', 'danger'] },
+          titulo: { type: 'string' },
+          detalle: { type: 'string', nullable: true },
+          origen: { type: 'string', nullable: true, example: 'caja' },
+          atendida: { type: 'boolean' },
+          requiere_validacion: { type: 'boolean' },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
+
       ErrorApi,
 
       ContextoConversacion: {

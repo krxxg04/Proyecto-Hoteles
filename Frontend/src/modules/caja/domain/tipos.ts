@@ -13,10 +13,41 @@ export type Turno = {
 
 export type EstadoCaja = {
   turno: Turno | null;
-  sencillo_esperado: number;
-  caja_chica: number;
+  /** Una sola caja: lo que dejó el último cierre. */
+  saldo: number;
+  /** Lo que debería haber ahora: apertura + ventas en efectivo − gastos en efectivo. */
+  efectivo_esperado: number;
+  gastos_turno: number;
   usuario: string | null;
   es_de_otro: boolean;
+};
+
+export const CATEGORIAS_GASTO = ['fijo', 'justificable'] as const;
+export type CategoriaGasto = (typeof CATEGORIAS_GASTO)[number];
+
+export type Gasto = {
+  id: string;
+  categoria: CategoriaGasto;
+  producto_id: string | null;
+  cantidad: number | null;
+  concepto: string;
+  monto: number;
+  medio: MedioPago;
+  justificacion: string | null;
+  created_at: string;
+  productos: { nombre: string; unidad: string } | null;
+  profiles: { nombre: string } | null;
+};
+
+export type Alerta = {
+  id: string;
+  severidad: 'info' | 'warning' | 'danger';
+  titulo: string;
+  detalle: string | null;
+  origen: string | null;
+  atendida: boolean;
+  requiere_validacion: boolean;
+  created_at: string;
 };
 
 export type ResumenVentas = {
@@ -39,9 +70,13 @@ export type ResumenCierre = {
   recaudado: number;
   por_medio: Partial<Record<MedioPago, number>>;
   por_banco: Record<string, number>;
-  efectivo_en_caja: number;
-  sencillo_dejado: number;
-  a_caja_chica: number;
+  gastos: number;
+  gastos_efectivo: number;
+  efectivo_esperado: number;
+  efectivo_contado: number;
+  /** Positiva si falta dinero, negativa si sobra. */
+  diferencia_caja: number;
+  saldo_nuevo: number;
   incidencias: number;
 };
 

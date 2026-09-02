@@ -158,7 +158,8 @@ const VENTAS = [
 ];
 
 /** CAJA_ESTADO del prototipo. */
-const CAJA = { sencillo: 100, caja_chica: 0 };
+/** Una sola caja (migración 12). El prototipo dejaba S/ 100 de sencillo; ese es el saldo. */
+const CAJA = { saldo: 100 };
 
 // --------------------------------------------------------------------- pasos
 
@@ -219,6 +220,10 @@ if (args.limpiar) {
    * que TURNO e INCIDENCIAS arrancan vacíos, igual que en el prototipo.
    */
   const EN_ORDEN = [
+    // `gastos` apunta a `turnos` Y a `productos`, las dos con `on delete restrict`: va
+    // primero o el borrado de turnos revienta. Es el mismo tropiezo que `turno_conteos`.
+    'gastos',
+    'alertas',
     'turno_conteos',
     'cierres_caja',
     'incidencias',
@@ -446,7 +451,7 @@ const { error: eCaja } = await admin
   .upsert({ tenant_id: tenantId, ...CAJA }, { onConflict: 'tenant_id' });
 
 if (eCaja) morir('caja', eCaja);
-console.log(`  Caja: sencillo S/ ${CAJA.sencillo.toFixed(2)}, caja chica S/ ${CAJA.caja_chica.toFixed(2)}.`);
+console.log(`  Caja: S/ ${CAJA.saldo.toFixed(2)} de saldo.`);
 
 // 8 · Personal --------------------------------------------------------------
 

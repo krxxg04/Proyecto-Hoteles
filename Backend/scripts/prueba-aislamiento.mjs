@@ -22,13 +22,13 @@
  *   node --env-file=.env.local scripts/prueba-aislamiento.mjs --limpiar   borra el hostal de prueba
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
-const ESQUEMA = join(AQUI, '..', '..', 'Database', '01_schema.sql');
+const DIRECTORIO_SQL = join(AQUI, '..', '..', 'Database');
 
 // --------------------------------------------------------------- argumentos
 
@@ -89,7 +89,7 @@ if (flag('limpiar')) {
 
 /**
  * Toda tabla de `public` con `tenant_id`. La lista está escrita a mano y se contrasta
- * contra `01_schema.sql` más abajo: si alguien agrega una tabla y no la agrega aquí,
+ * contra TODAS las migraciones más abajo: si alguien agrega una tabla y no la agrega aquí,
  * la prueba avisa en vez de dar un falso verde.
  */
 const TABLAS = [
@@ -97,22 +97,40 @@ const TABLAS = [
   'movimientos_inventario', 'aseo', 'huespedes', 'estadias', 'acompanantes',
   'reservas', 'inspecciones', 'caja_estado', 'turnos', 'turno_conteos',
   'incidencias', 'ventas', 'cierres_caja', 'tipo_cambio', 'alertas',
-  'integraciones', 'medios', 'consentimientos', 'audit_log',
+  'integraciones', 'medios', 'consentimientos', 'audit_log', 'gastos',
 ];
 
 /** Sin `tenant_id`: `tenants` se filtra por `id` y los catálogos son globales a propósito. */
 const SIN_TENANT = ['tenants', 'caracteristicas', 'bancos'];
 
+/**
+ * Lee TODAS las migraciones, no solo `01_schema.sql`.
+ *
+ * Mirar solo la primera era un agujero en el propio guardián: `gastos` llegó en la 12 y el
+ * bloque 0 seguía diciendo «las 24 tablas están cubiertas» tan tranquilo. Una tabla nueva
+ * sin probar es exactamente lo que este bloque existe para cazar.
+ */
 function revisarCobertura() {
-  let sql;
+  let archivos;
   try {
-    sql = readFileSync(ESQUEMA, 'utf8');
+    archivos = readdirSync(DIRECTORIO_SQL).filter((f) => /^\d\d_.*\.sql$/.test(f)).sort();
   } catch {
-    return ['no se pudo leer 01_schema.sql para contrastar la lista'];
+    return ['no se pudo leer Database/ para contrastar la lista'];
   }
-  const enEsquema = [...sql.matchAll(/create table if not exists public\.(\w+)/g)].map((m) => m[1]);
+  if (archivos.length === 0) return ['no se encontró ninguna migración en Database/'];
+
+  const enEsquema = new Set();
+  for (const archivo of archivos) {
+    const sql = readFileSync(join(DIRECTORIO_SQL, archivo), 'utf8');
+    for (const m of sql.matchAll(/create table if not exists public\.(\w+)/g)) {
+      enEsquema.add(m[1]);
+    }
+  }
+
   const cubiertas = new Set([...TABLAS, ...SIN_TENANT]);
-  return enEsquema.filter((t) => !cubiertas.has(t)).map((t) => `la tabla "${t}" no está cubierta`);
+  return [...enEsquema]
+    .filter((t) => !cubiertas.has(t))
+    .map((t) => `la tabla "${t}" no está cubierta`);
 }
 
 // ------------------------------------------------------------------ fixture
@@ -226,7 +244,7 @@ async function sembrarB() {
     ['acompanantes', { estadia_id: estadia.id, nombre: 'Acompañante de prueba' }],
     ['reservas', { nombre_contacto: 'Reserva de prueba', fecha_entrada: hoy, personas: 1 }],
     ['inspecciones', { cuarto_id: cuarto.id, resultado: [{ item: 'Toalla', esperado: 2, confirmado: 2 }] }],
-    ['caja_estado', { sencillo: 50, caja_chica: 100 }, 'tenant_id'],
+    ['caja_estado', { saldo: 150 }, 'tenant_id'],
     ['movimientos_inventario', { producto_id: producto.id, tipo: 'compra', cantidad: 10, motivo: 'Prueba' }],
     ['aseo', { producto_id: producto.id, cantidad: 1, cuarto_id: cuarto.id, estado: 'pendiente' }],
     ['turno_conteos', { turno_id: turno.id, producto_id: producto.id, apertura: 10, esperado: 10, contado: 9 }],
@@ -247,6 +265,13 @@ async function sembrarB() {
     ['integraciones', { clave: 'prueba', nombre: 'Integración de prueba' }, 'tenant_id,clave'],
     ['medios', { object_key: `prueba/${tenantB}.jpg`, tipo: 'inspeccion', huesped_id: huesped.id }, 'bucket,object_key'],
     ['consentimientos', { huesped_id: huesped.id, finalidad: 'Prueba de aislamiento', otorgado: true }],
+    // Sin una fila aquí, "A no ve los gastos de B" sería un verde trivial sobre una tabla
+    // vacía. Va la justificable: su texto es el dato sensible que no debe cruzar.
+    ['gastos', {
+      turno_id: turno.id, categoria: 'justificable',
+      concepto: 'Escobas de prueba', monto: 20, medio: 'efectivo',
+      justificacion: 'Prueba de aislamiento',
+    }],
   ];
 
   for (const [tabla, fila, conflicto] of resto) {
@@ -638,6 +663,22 @@ for (const fn of ['inhabilitar_tipo_cuarto', 'habilitar_tipo_cuarto']) {
   const { error } = await clienteLimpiezaB.rpc(fn, { p_tipo_id: tipoB.id });
   comprobar(`limpieza no puede ejecutar ${fn}()`, !!error, 'lo ejecutó');
 }
+
+const { data: gastosLimpieza } = await clienteLimpiezaB.from('gastos').select('*');
+comprobar('limpieza no ve los gastos de la caja', (gastosLimpieza ?? []).length === 0, 'los vio');
+
+const { error: errGasto } = await clienteLimpiezaB.rpc('registrar_gasto', {
+  p_categoria: 'justificable',
+  p_concepto: 'Algo',
+  p_monto: 10,
+  p_justificacion: 'porque quiero',
+});
+comprobar('limpieza no puede registrar un gasto', !!errGasto, 'lo registró');
+
+const { error: errAlerta } = await clienteLimpiezaB.rpc('atender_alerta', {
+  p_alerta_id: '00000000-0000-0000-0000-000000000000',
+});
+comprobar('limpieza no puede atender alertas', !!errAlerta, 'la atendió');
 const { error: errHabCuarto } = await clienteLimpiezaB.rpc('habilitar_cuarto', {
   p_cuarto_id: cuartoB.id,
 });

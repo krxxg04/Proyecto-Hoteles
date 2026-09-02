@@ -6,6 +6,7 @@ import { Package, ShoppingCart, WashingMachine, Plus, X } from 'lucide-react';
 import type { Producto } from '../domain/tipos';
 import type { CuartoConTipo } from '@/modules/cuartos/domain/tipos';
 import { moverStock, venderProducto, enviarAAseo } from '../infrastructure/acciones';
+import { registrarGasto } from '@/modules/caja/infrastructure/acciones';
 import { MEDIOS_PAGO, ETIQUETA_MEDIO, type MedioPago, type Rol } from '@/shared/dominio/tipos';
 import { esDeCaja } from '@/shared/ui/navegacion';
 import { Boton, Campo, ErrorCaja, Pildora, Vacio, soles } from '@/shared/ui/primitivos';
@@ -207,7 +208,9 @@ function DialogoMovimiento({
   const [error, setError] = useState<string | null>(null);
   const [enviando, empezar] = useTransition();
 
-  const titulo = { vender: 'Vender', compra: 'Registrar compra', entrega: 'Entregar a habitación' }[tipo];
+  const [monto, setMonto] = useState('');
+
+  const titulo = { vender: 'Vender', compra: 'Comprar', entrega: 'Entregar a habitación' }[tipo];
 
   function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -224,12 +227,21 @@ function DialogoMovimiento({
               medio,
               banco: medio === 'tarjeta' ? banco : undefined,
             })
-          : await moverStock({
-              tipo: tipo === 'compra' ? 'compra' : 'entrega',
-              producto_id: producto.id,
-              cantidad: n,
-              cuarto_id: tipo === 'entrega' ? cuartoId : undefined,
-            });
+          : tipo === 'compra'
+            ? // Comprar es un gasto fijo: sale de la caja y entra al inventario de una vez.
+              await registrarGasto({
+                categoria: 'fijo',
+                producto_id: producto.id,
+                cantidad: n,
+                monto: Number(monto),
+                medio,
+              })
+            : await moverStock({
+                tipo: 'entrega',
+                producto_id: producto.id,
+                cantidad: n,
+                cuarto_id: cuartoId,
+              });
 
       if (!r.ok) setError(r.error);
       else onHecho();
@@ -269,6 +281,27 @@ function DialogoMovimiento({
             onChange={(e) => setCantidad(e.target.value)}
           />
 
+          {tipo === 'compra' && (
+            <>
+              <Campo
+                etiqueta="Cuánto se pagó en total (S/)"
+                type="number"
+                min="0"
+                step="0.10"
+                placeholder={
+                  producto.costo_referencia > 0
+                    ? (producto.costo_referencia * (Number(cantidad) || 1)).toFixed(2)
+                    : undefined
+                }
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+              />
+              <p className="-mt-1 text-[12px] text-tx-muted">
+                Sale de la caja. Si se pasa mucho del precio de referencia, queda una alerta.
+              </p>
+            </>
+          )}
+
           {(tipo === 'entrega' || tipo === 'vender') && (
             <label className="block">
               <span className="mb-1.5 block text-[12.5px] font-medium text-tx-sec">
@@ -289,10 +322,12 @@ function DialogoMovimiento({
             </label>
           )}
 
-          {tipo === 'vender' && (
+          {(tipo === 'vender' || tipo === 'compra') && (
             <>
               <div>
-                <span className="mb-1.5 block text-[12.5px] font-medium text-tx-sec">Cómo paga</span>
+                <span className="mb-1.5 block text-[12.5px] font-medium text-tx-sec">
+                  {tipo === 'compra' ? 'Cómo se pagó' : 'Cómo paga'}
+                </span>
                 <div className="flex flex-wrap gap-2">
                   {MEDIOS_PAGO.map((m) => (
                     <Pildora key={m} activa={medio === m} onClick={() => setMedio(m)}>
@@ -309,10 +344,13 @@ function DialogoMovimiento({
                   placeholder="BCP, BBVA…"
                 />
               )}
-              <p className="rounded-md bg-bg-ter px-3 py-2 text-[12.5px] text-tx-muted">
-                Se cobrará {soles(producto.precio * (Number(cantidad) || 0))}. El precio lo calcula el
-                servidor desde el catálogo.
-              </p>
+              {/* Solo al vender: en una compra el monto lo pone quien pagó, no el catálogo. */}
+              {tipo === 'vender' && (
+                <p className="rounded-md bg-bg-ter px-3 py-2 text-[12.5px] text-tx-muted">
+                  Se cobrará {soles(producto.precio * (Number(cantidad) || 0))}. El precio lo calcula
+                  el servidor desde el catálogo.
+                </p>
+              )}
             </>
           )}
 
