@@ -102,10 +102,10 @@ const CUARTOS = [
   { numero: '101', tipo: 'Estándar',           estado: 'lista',      nota: 'Lista para check-in 15:00', aforo: 2, caracteristicas: ['tv', 'wifi', 'agua_caliente'] },
   { numero: '102', tipo: 'Matrimonial',        estado: 'ocupada',    nota: 'Carlos M. · sale mañana',   aforo: 2, caracteristicas: ['tv', 'wifi', 'agua_caliente'] },
   { numero: '103', tipo: 'Estándar',           estado: 'libre',      nota: 'Disponible',                aforo: 2, caracteristicas: ['wifi', 'agua_caliente'] },
-  { numero: '105', tipo: 'Ejecutiva',          estado: 'inspeccion', nota: 'Check-out sin verificar',   aforo: 3, caracteristicas: ['tv', 'wifi', 'calle'] },
+  { numero: '105', tipo: 'Ejecutiva',          estado: 'inspeccion', nota: 'Salió el huésped · sin revisar', aforo: 3, caracteristicas: ['tv', 'wifi', 'calle'] },
   { numero: '201', tipo: 'Ejecutiva con Aire', estado: 'ocupada',    nota: 'Familia Ríos · 3 noches',   aforo: 3, caracteristicas: ['tv', 'wifi', 'agua_caliente', 'aire', 'balcon'] },
   { numero: '203', tipo: 'Estándar',           estado: 'limpieza',   nota: 'Marta · limpieza en curso', aforo: 2, caracteristicas: ['tv', 'wifi'] },
-  { numero: '204', tipo: 'Jacuzzi',            estado: 'checkout',   nota: 'Renovación pendiente',      aforo: 2, caracteristicas: ['tv', 'wifi', 'jacuzzi', 'agua_caliente', 'aire', 'calle'] },
+  { numero: '204', tipo: 'Jacuzzi',            estado: 'inspeccion', nota: 'Salió el huésped · sin revisar', aforo: 2, caracteristicas: ['tv', 'wifi', 'jacuzzi', 'agua_caliente', 'aire', 'calle'] },
   { numero: '205', tipo: 'Matrimonial',        estado: 'lista',      nota: 'Lista para check-in',       aforo: 2, caracteristicas: ['tv', 'wifi', 'agua_caliente'] },
   { numero: '301', tipo: 'Ejecutiva',          estado: 'ocupada',    nota: 'Andrés V. · 2 noches',      aforo: 3, caracteristicas: ['tv', 'wifi', 'calle'] },
 ];
@@ -838,7 +838,7 @@ Listo. La base tiene lo mismo que mostraba el prototipo.
 ${listaAcceso}
 
   Libres o listas: 101, 103, 205        Ocupadas: 102, 201, 301
-  Para inspeccionar: 105                En limpieza: 203        Check-out: 204
+  Por revisar: 105 y 204                En limpieza: 203
 
 Prueba el asistente (abre turno primero desde Caja):
 

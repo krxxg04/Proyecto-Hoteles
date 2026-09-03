@@ -55,7 +55,7 @@ Variables opcionales:
 
 - `DEMO_HOSTAL_CIUDAD=Lima`
 - `DEMO_RESEED=0`
-- `ANTHROPIC_API_KEY`
+- `DEEPSEEK_API_KEY`
 - `MODELO_IA`
 - `HABILITAR_DOCS=1`
 

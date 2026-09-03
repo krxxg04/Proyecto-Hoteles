@@ -44,7 +44,7 @@ export async function registrarCheckin(
   return exito(data as ResultadoCheckin);
 }
 
-/** Deja el cuarto en "checkout", no en disponible: antes van inspección y limpieza. */
+/** Deja el cuarto en "inspección", no en disponible: antes van la revisión y la limpieza. */
 export async function registrarCheckout(estadiaId: string): Promise<Resultado<null>> {
   await exigirRol(...ROLES_CAJA);
 

@@ -239,7 +239,7 @@ export function Panel({
   /** Lo que hay que atender primero; si no hay nada pendiente, las primeras por número. */
   const destacados = [...cuartos]
     .sort((a, b) => {
-      const urgente = (e: string) => (['checkout', 'limpieza', 'inspeccion'].includes(e) ? 0 : 1);
+      const urgente = (e: string) => (['inspeccion', 'limpieza'].includes(e) ? 0 : 1);
       return urgente(a.estado) - urgente(b.estado) || a.numero.localeCompare(b.numero);
     })
     .slice(0, 6);

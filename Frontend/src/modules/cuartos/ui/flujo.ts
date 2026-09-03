@@ -9,19 +9,23 @@ import type { EstadoCuarto } from '../domain/tipos';
  * las dos en la misma jornada.
  *
  * El verbo está escrito desde quien lo pulsa, no desde la base de datos: quien limpia
- * no piensa «marcar inspección», piensa «ya terminé».
+ * no piensa «marcar como lista», piensa «ya terminé».
+ *
+ * El flujo es `ocupada -> inspeccion -> limpieza -> lista` desde
+ * `15_sin_estado_checkout.sql`: la revisión de salida va ANTES de limpiar, no después.
+ * `inspeccion` no aparece en la vista de piso porque solo recepción la mueve — quien
+ * limpia entra en el flujo cuando el cuarto ya está revisado.
  */
 export const SIGUIENTE_PASO: Partial<
   Record<EstadoCuarto, { estado: EstadoCuarto; verbo: string; icono: string }>
 > = {
-  checkout: { estado: 'limpieza', verbo: 'Empezar a limpiar', icono: 'BrushCleaning' },
-  limpieza: { estado: 'inspeccion', verbo: 'Terminé de limpiar', icono: 'ClipboardList' },
-  inspeccion: { estado: 'lista', verbo: 'Marcar como lista', icono: 'CheckCheck' },
+  inspeccion: { estado: 'limpieza', verbo: 'Revisado, a limpiar', icono: 'BrushCleaning' },
+  limpieza: { estado: 'lista', verbo: 'Terminé de limpiar', icono: 'CheckCheck' },
   mantenimiento: { estado: 'limpieza', verbo: 'Ya está arreglada', icono: 'BrushCleaning' },
 };
 
 /** Lo que hay por atender, en orden de flujo y no de número. */
-export const ORDEN_TRABAJO: EstadoCuarto[] = ['checkout', 'limpieza', 'inspeccion', 'mantenimiento'];
+export const ORDEN_TRABAJO: EstadoCuarto[] = ['inspeccion', 'limpieza', 'mantenimiento'];
 
 export function ordenarPorTrabajo<T extends { estado: EstadoCuarto; numero: string }>(
   cuartos: T[]

@@ -6,7 +6,7 @@
 SaaS multi-tenant de gestión de hostales con IA como núcleo. Mercado Perú, moneda **S/**. Modelo: licencia mensual. Hoy hay un **prototipo front-only** (`hostal-atlas.html`) que es la referencia visual y de lógica.
 
 ## Stack (decidido en ADR-001)
-Next.js + TypeScript (PWA) · Supabase Postgres con **RLS por `tenant_id`** · Cloudflare R2 para fotos/video · **Claude Haiku** para IA (híbrido: reglas primero, LLM en el resto) · Cloudflare hosting.
+Next.js + TypeScript (PWA) · Supabase Postgres con **RLS por `tenant_id`** · Cloudflare R2 para fotos/video · **DeepSeek `v4-flash`** para IA (híbrido: reglas primero, LLM en el resto; cambiado en **ADR-003**, antes Claude Haiku) · Cloudflare hosting.
 
 ## Reglas de seguridad (GATE de merge — innegociable)
 Ningún cambio se integra sin:

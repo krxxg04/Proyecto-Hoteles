@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { proveedorActivo } from '@/modules/asistente/infrastructure/claude';
+import { faltaClaveIA, proveedorActivo } from '@/modules/asistente/infrastructure/activo';
 import { r2Configurado } from '@/modules/medios/infrastructure/r2';
 import { clienteAdmin } from '@/shared/supabase/admin';
 
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     servicio: 'hostal-backend',
     supabase: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
     // Solo el nombre del modelo, nunca la clave.
-    ia: proveedor ? proveedor.nombre : 'solo reglas (falta ANTHROPIC_API_KEY)',
+    ia: proveedor ? proveedor.nombre : faltaClaveIA(),
     medios: r2Configurado() ? 'r2 (bucket privado)' : 'sin configurar (faltan claves de R2)',
     ...(base ? { base } : {}),
   });

@@ -1,14 +1,13 @@
 export const ESTADOS_CUARTO = [
-  'libre', 'ocupada', 'checkout', 'limpieza', 'inspeccion', 'lista', 'mantenimiento',
+  'libre', 'ocupada', 'inspeccion', 'limpieza', 'lista', 'mantenimiento',
 ] as const;
 export type EstadoCuarto = (typeof ESTADOS_CUARTO)[number];
 
 export const ETIQUETA_ESTADO: Record<EstadoCuarto, string> = {
   libre: 'Disponible',
   ocupada: 'Ocupada',
-  checkout: 'Check-out',
-  limpieza: 'En limpieza',
   inspeccion: 'Inspección',
+  limpieza: 'En limpieza',
   lista: 'Lista',
   mantenimiento: 'Mantenimiento',
 };

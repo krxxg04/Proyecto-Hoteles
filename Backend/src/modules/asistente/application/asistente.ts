@@ -24,7 +24,7 @@ import type {
   TarjetaAccion,
 } from '../domain/tarjeta';
 import { cargarCatalogo } from '../infrastructure/catalogo';
-import { proveedorActivo } from '../infrastructure/claude';
+import { proveedorActivo } from '../infrastructure/activo';
 
 import { registrarVenta } from '@/modules/ventas/application/ventas';
 import { registrarCompra, entregarACuarto, ajustarStock } from '@/modules/inventario/application/stock';

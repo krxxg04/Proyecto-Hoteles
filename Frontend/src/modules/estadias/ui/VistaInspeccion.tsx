@@ -38,8 +38,8 @@ export function VistaInspeccion({
 
   // ------------------------------------------------------- elegir habitación
 
-  /** Lo que toca revisar primero: lo que acaba de salir o quedó marcado para inspección. */
-  const porRevisar = cuartos.filter((c) => c.estado === 'checkout' || c.estado === 'inspeccion');
+  /** Lo que toca revisar: los cuartos de los que acaba de salir el huésped. */
+  const porRevisar = cuartos.filter((c) => c.estado === 'inspeccion');
   const resto = cuartos.filter((c) => !porRevisar.includes(c));
 
   return (

@@ -19,17 +19,20 @@ const NUMEROS: Record<string, number> = {
 
 /**
  * El orden importa: "ya está limpia" significa que la limpieza TERMINÓ, no que hay que hacerla.
- * Según el flujo (checkout -> limpieza -> inspección -> lista), lo siguiente es inspeccionar.
+ * En el flujo actual (ocupada -> inspeccion -> limpieza -> lista) lo siguiente es `lista`:
+ * la inspeccion va ANTES de limpiar, no despues. Con el flujo viejo esto decia
+ * `inspeccion`, y dejarlo asi mandaria el cuarto hacia atras.
  */
 const ESTADO_POR_PALABRA: Array<[RegExp, EstadoCuarto]> = [
-  [/\b(ya (esta|quedo)|termine|termino|acabe|acabo|quedo)\b.*\blimpi/, 'inspeccion'],
+  [/\b(ya (esta|quedo)|termine|termino|acabe|acabo|quedo)\b.*\blimpi/, 'lista'],
   [/\blimpi(a|o|ando|eza|ar)\b/, 'limpieza'],
   [/\blist(a|o)\b/, 'lista'],
   [/\bdisponible|libre\b/, 'libre'],
   [/\bocupad(a|o)\b/, 'ocupada'],
   [/\bmantenimiento|averi|malogr/, 'mantenimiento'],
   [/\binspecci/, 'inspeccion'],
-  [/\bcheck ?-?out|salida\b/, 'checkout'],
+  // Salio el huesped: el cuarto va a revision, que es lo que ahora significa inspeccion.
+  [/\bcheck ?-?out|salida\b/, 'inspeccion'],
 ];
 
 export function normalizar(texto: string): string {

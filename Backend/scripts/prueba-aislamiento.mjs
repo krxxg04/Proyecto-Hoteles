@@ -583,7 +583,7 @@ comprobar(
 const { data: cuartoB } = await admin
   .from('cuartos').select('id, estado').eq('tenant_id', tenantB).limit(1).single();
 
-for (const estado of ['ocupada', 'libre', 'checkout']) {
+for (const estado of ['ocupada', 'libre', 'inspeccion']) {
   const { error } = await clienteLimpiezaB.rpc('cambiar_estado_cuarto', {
     p_cuarto_id: cuartoB.id,
     p_estado: estado,

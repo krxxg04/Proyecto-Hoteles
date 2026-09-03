@@ -12,8 +12,8 @@ export type Pendiente = {
 /**
  * Puerto del proveedor de IA. El asistente no sabe quién está detrás.
  *
- * ADR-001 eligió Claude Haiku. Cambiar de modelo es escribir otro adaptador y tocar
- * `proveedorActivo()` — pero es un cambio de stack, así que va en un ADR nuevo.
+ * `ADR-001` eligió Claude Haiku; `ADR-003` pasó a DeepSeek por coste. Hay un adaptador
+ * por proveedor y `activo.ts` elige — que es exactamente para lo que existe este puerto.
  */
 export type ProveedorIA = {
   nombre: string;

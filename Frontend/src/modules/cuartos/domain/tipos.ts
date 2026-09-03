@@ -1,5 +1,5 @@
 export const ESTADOS_CUARTO = [
-  'libre', 'ocupada', 'checkout', 'limpieza', 'inspeccion', 'lista', 'mantenimiento',
+  'libre', 'ocupada', 'inspeccion', 'limpieza', 'lista', 'mantenimiento',
 ] as const;
 export type EstadoCuarto = (typeof ESTADOS_CUARTO)[number];
 

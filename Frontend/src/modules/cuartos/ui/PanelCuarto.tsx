@@ -37,7 +37,6 @@ function Icono({ nombre, className }: { nombre: string; className?: string }) {
 const ICONO_ESTADO: Record<EstadoCuarto, string> = {
   libre: 'BedDouble',
   ocupada: 'User',
-  checkout: 'LogOut',
   limpieza: 'BrushCleaning',
   inspeccion: 'ClipboardList',
   lista: 'CircleCheck',
@@ -356,8 +355,8 @@ export function PanelCuarto({
 
           {manejaDinero && cuarto.estado === 'ocupada' && (
             <p className="-mt-2 text-center text-[11.5px] text-tx-muted">
-              El check-out deja el cuarto en «Check-out», no en disponible: antes van
-              inspección y limpieza.
+              El check-out deja el cuarto en «Inspección», no en disponible: primero se
+              revisa que no falte nada, y después se limpia.
             </p>
           )}
         </div>

@@ -195,7 +195,7 @@ export const documentoOpenAPI = {
         tags: ['Asistente'],
         summary: 'Interpretar un comando en lenguaje natural',
         description: [
-          'Reglas primero, Claude Haiku solo para lo que no reconocen. No ejecuta nada.',
+          'Reglas primero, DeepSeek solo para lo que no reconocen. No ejecuta nada.',
           '',
           'Si falta información devuelve `tipo: "pregunta"`: manda el `contexto` tal cual en la',
           'siguiente llamada junto con la respuesta del usuario, y así hasta que salga la tarjeta.',
@@ -674,9 +674,8 @@ export const documentoOpenAPI = {
                 total: 12,
                 libre: 2,
                 ocupada: 5,
-                checkout: 1,
+                inspeccion: 1,
                 limpieza: 2,
-                inspeccion: 0,
                 lista: 2,
                 mantenimiento: 0,
               },
@@ -1103,7 +1102,7 @@ export const documentoOpenAPI = {
       delete: {
         tags: ['Estadías'],
         summary: 'Check-out',
-        description: 'Deja el cuarto en `checkout`, no en disponible: antes van inspección y limpieza.',
+        description: 'Deja el cuarto en `inspeccion`, no en disponible: antes van la revisión y la limpieza.',
         requestBody: cuerpoJson({
           type: 'object',
           properties: { estadia_id: Uuid },

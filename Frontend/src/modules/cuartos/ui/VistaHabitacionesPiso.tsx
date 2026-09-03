@@ -21,8 +21,9 @@ import { PuntoEnVivo } from '@/shared/ui/PuntoEnVivo';
  * cualquier cosa; quien está limpiando con una tablet en la mano no elige: termina un
  * cuarto y pasa al siguiente paso. Un solo botón grande, y el que toca.
  *
- * Los estados `libre`, `ocupada` y `checkout` ni se ofrecen: van con el check-in y el
- * cobro, y desde `08_acciones_por_rol.sql` la base los rechaza para estos roles.
+ * Los estados `libre`, `ocupada` e `inspeccion` ni se ofrecen: los dos primeros van con
+ * el check-in y el cobro, y la inspección es la revisión de salida, que hace recepción.
+ * Desde `15_sin_estado_checkout.sql` la base los rechaza para estos roles.
  */
 
 /** Lo que sí puede hacer este rol fuera del flujo: avisar de una avería. */

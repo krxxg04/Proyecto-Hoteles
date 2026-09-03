@@ -68,7 +68,7 @@ export async function resumenPanel(): Promise<Resultado<ResumenPanel>> {
   const listas = cuartos.filter((c) => c.estado === 'lista').length;
   const disponibles = cuartos.filter((c) => c.estado === 'lista' || c.estado === 'libre').length;
   const porLimpiar = cuartos.filter((c) =>
-    ['limpieza', 'inspeccion', 'checkout'].includes(c.estado)
+    ['inspeccion', 'limpieza'].includes(c.estado)
   ).length;
 
   // ----------------------------------------------------------------- dinero
