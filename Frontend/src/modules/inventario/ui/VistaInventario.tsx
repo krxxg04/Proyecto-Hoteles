@@ -50,7 +50,7 @@ export function VistaInventario({
   const criticos = productos.filter((p) => p.bajoMinimo || p.semaforo === 'danger').length;
 
   /**
-   * Comprar y vender mueven dinero; entregar y mandar a lavandería, no.
+   * Agregar y vender mueven dinero; entregar y mandar a lavandería, no.
    *
    * `08_acciones_por_rol.sql` ya rechaza la compra en la base para limpieza y
    * mantenimiento. Esconder el botón es solo no ofrecer algo que iba a fallar.
@@ -148,7 +148,7 @@ export function VistaInventario({
                       onClick={() => setDialogo({ tipo: 'compra', producto: p })}
                     >
                       <Plus className="size-3.5" />
-                      Comprar
+                      Agregar
                     </Boton>
                   )}
                   {manejaDinero && p.categoria === 'vendible' && (
@@ -210,7 +210,7 @@ function DialogoMovimiento({
 
   const [monto, setMonto] = useState('');
 
-  const titulo = { vender: 'Vender', compra: 'Comprar', entrega: 'Entregar a habitación' }[tipo];
+  const titulo = { vender: 'Vender', compra: 'Agregar al stock', entrega: 'Entregar a habitación' }[tipo];
 
   function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -228,7 +228,7 @@ function DialogoMovimiento({
               banco: medio === 'tarjeta' ? banco : undefined,
             })
           : tipo === 'compra'
-            ? // Comprar es un gasto fijo: sale de la caja y entra al inventario de una vez.
+            ? // Agregar registra un gasto fijo: sale de la caja y entra al inventario de una vez.
               await registrarGasto({
                 categoria: 'fijo',
                 producto_id: producto.id,

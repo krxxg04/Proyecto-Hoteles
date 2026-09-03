@@ -19,9 +19,26 @@
  * Uso:
  *   node --env-file=.env.local scripts/seed.mjs --slug aurora
  *   node --env-file=.env.local scripts/seed.mjs --slug aurora --limpiar
+ *   node --env-file=.env.demo  scripts/seed.mjs --slug demo --rica
+ *
+ * `--rica` añade el histórico grande de `datos-demo.mjs`: 14 días de ventas y consumo,
+ * estadías cerradas, reservas, turnos cerrados con sus gastos y las alertas que dejan.
+ * Sin la bandera, esto sigue siendo exactamente el prototipo — que es lo que hace útil
+ * el contraste contra `index.html` en desarrollo.
  */
 
 import { createClient } from '@supabase/supabase-js';
+
+import {
+  CAJA_RICA,
+  COSTO_REFERENCIA,
+  HUESPEDES_EXTRA,
+  construirEntregas,
+  construirEstadiasCerradas,
+  construirReservas,
+  construirTurnos,
+  construirVentas,
+} from './datos-demo.mjs';
 
 // --------------------------------------------------------------- argumentos
 
@@ -59,6 +76,9 @@ const admin = createClient(url, clave, {
   // Estos datos no los escribe una persona ni el asistente. Ver `shared/origen.ts`.
   global: { headers: { 'x-origen': 'sistema' } },
 });
+
+/** Con `--rica`, el histórico grande de la demo. Sin ella, solo el prototipo. */
+const rica = !!args.rica;
 
 // ------------------------------------------------------------ datos del mockup
 
@@ -294,7 +314,12 @@ const { data: productos, error: eProductos } = await admin
   .upsert(
     PRODUCTOS.map(({ stock_actual, ...p }) => {
       void stock_actual; // el stock entra por movimientos, más abajo
-      return { ...p, tenant_id: tenantId };
+      return {
+        ...p,
+        tenant_id: tenantId,
+        // Sin costo de referencia la alarma de sobreprecio no puede saltar nunca.
+        ...(rica ? { costo_referencia: COSTO_REFERENCIA[p.nombre] ?? 0 } : {}),
+      };
     }),
     { onConflict: 'tenant_id,nombre' }
   )
@@ -307,10 +332,12 @@ console.log(`  Catálogo: ${productos.length} productos.`);
 
 // 4 · Huéspedes -------------------------------------------------------------
 
+const LISTA_HUESPEDES = rica ? [...HUESPEDES, ...HUESPEDES_EXTRA] : HUESPEDES;
+
 const { data: huespedes, error: eHuespedes } = await admin
   .from('huespedes')
   .upsert(
-    HUESPEDES.map((h) => ({ ...h, tenant_id: tenantId })),
+    LISTA_HUESPEDES.map((h) => ({ ...h, tenant_id: tenantId })),
     { onConflict: 'tenant_id,tipo_doc,num_doc' }
   )
   .select('id, num_doc');
@@ -337,7 +364,58 @@ const CUANDO = {
   ayer: new Date(ahora - 26 * 3600 * 1000).toISOString(),
   hoy: new Date(ahora - 2 * 3600 * 1000).toISOString(),
 };
-const APERTURA = new Date(ahora - 3 * 24 * 3600 * 1000).toISOString();
+// Con `--rica` la carga inicial se va más atrás que los 14 días de histórico: si entrara
+// después de la primera venta, el kardex tendría stock negativo a mitad de la semana.
+const APERTURA = new Date(ahora - (rica ? 16 : 3) * 24 * 3600 * 1000).toISOString();
+
+const numerosCuarto = CUARTOS.map((c) => c.numero);
+
+/** Ventas: las nueve del prototipo, o catorce días de movimiento. */
+const LISTA_VENTAS = rica ? construirVentas({ numerosCuarto, ahora }) : VENTAS;
+const cuandoVenta = (v) => v.ts ?? CUANDO[v.dia];
+
+/** Insumos entregados a habitaciones. Solo en la demo: el prototipo no los tenía. */
+const ENTREGAS = rica ? construirEntregas({ numerosCuarto, ahora }) : [];
+
+/** Turnos cerrados con sus gastos. Sus compras también entran al kardex. */
+const TURNOS_DEMO = rica ? construirTurnos({ ahora }) : [];
+const GASTOS_FIJOS = TURNOS_DEMO.flatMap((t) =>
+  t.gastos.filter((g) => g.categoria === 'fijo')
+);
+
+/**
+ * Que la suma del kardex dé el stock final no basta: el saldo tiene que ser positivo en
+ * CADA momento. La primera versión de este dataset vendía kits de aseo doce días antes de
+ * comprarlos — la suma cuadraba y el recorrido no, que es un histórico imposible.
+ *
+ * Se comprueba antes de escribir nada, en orden cronológico y producto por producto.
+ */
+function comprobarRecorrido(inicialDe) {
+  const movimientos = [
+    ...PRODUCTOS.map((p) => ({ producto: p.nombre, delta: inicialDe(p), ts: APERTURA })),
+    ...LISTA_VENTAS.map((v) => ({ producto: v.producto, delta: -v.cantidad, ts: cuandoVenta(v) })),
+    ...ENTREGAS.map((e) => ({ producto: e.producto, delta: -e.cantidad, ts: e.ts })),
+    ...TURNOS_DEMO.flatMap((t) =>
+      t.gastos
+        .filter((g) => g.categoria === 'fijo')
+        .map((g) => ({ producto: g.producto, delta: g.cantidad, ts: t.cerrado_at }))
+    ),
+  ].sort((a, b) => a.ts.localeCompare(b.ts));
+
+  const saldo = {};
+  for (const m of movimientos) {
+    saldo[m.producto] = (saldo[m.producto] ?? 0) + m.delta;
+    if (saldo[m.producto] < 0) {
+      morir(
+        `recorrido del kardex de ${m.producto}`,
+        new Error(
+          `el saldo llega a ${saldo[m.producto]} el ${m.ts.slice(0, 10)}: se consume antes ` +
+            'de comprar. Baja el consumo o adelanta la compra en datos-demo.mjs.'
+        )
+      );
+    }
+  }
+}
 
 const yaSembrado = productos.some((p) => Number(p.stock) > 0);
 
@@ -345,14 +423,44 @@ if (yaSembrado) {
   console.log('  Stock: los productos ya tenían movimientos, no se tocan.');
   console.log('    Para rehacerlo desde cero: --limpiar');
 } else {
-  const vendidoDe = (nombre) =>
-    VENTAS.filter((v) => v.producto === nombre).reduce((s, v) => s + v.cantidad, 0);
+  const sumaDe = (filas, nombre) =>
+    filas.filter((f) => f.producto === nombre).reduce((s, f) => s + f.cantidad, 0);
+
+  /**
+   * El stock final tiene que ser el del prototipo, y el kardex tiene que llegar solo a
+   * ese número. Con `--rica` hay tres salidas y dos entradas en juego, así que la carga
+   * inicial es lo que falta para que la cuenta cierre:
+   *
+   *   inicial = final + vendido + entregado − comprado_en_gastos
+   *
+   * Si sale negativa, el dataset está pidiendo comprar más de lo que se consume: se
+   * revienta aquí con el nombre del producto en vez de dejar un kardex que no cuadra.
+   */
+  const inicialDe = (p) =>
+    p.stock_actual +
+    sumaDe(LISTA_VENTAS, p.nombre) +
+    sumaDe(ENTREGAS, p.nombre) -
+    sumaDe(GASTOS_FIJOS, p.nombre);
+
+  for (const p of PRODUCTOS) {
+    if (inicialDe(p) < 0) {
+      morir(
+        `carga inicial de ${p.nombre}`,
+        new Error(
+          `saldría ${inicialDe(p)}: los gastos compran más de lo que se consume. ` +
+            'Sube el consumo en datos-demo.mjs o baja la cantidad del gasto.'
+        )
+      );
+    }
+  }
+
+  comprobarRecorrido(inicialDe);
 
   const compras = PRODUCTOS.map((p) => ({
     tenant_id: tenantId,
     producto_id: idDeProducto[p.nombre],
     tipo: 'compra',
-    cantidad: p.stock_actual + vendidoDe(p.nombre),
+    cantidad: inicialDe(p),
     motivo: 'Carga inicial (datos del prototipo)',
     created_at: APERTURA,
   })).filter((m) => m.cantidad > 0);
@@ -360,21 +468,36 @@ if (yaSembrado) {
   const { error: eCompras } = await admin.from('movimientos_inventario').insert(compras);
   if (eCompras) morir('stock inicial', eCompras);
 
-  const salidas = VENTAS.map((v) => ({
+  const salidas = LISTA_VENTAS.map((v) => ({
     tenant_id: tenantId,
     producto_id: idDeProducto[v.producto],
     tipo: 'venta',
     cantidad: -v.cantidad,
     cuarto_id: idDeCuarto[v.cuarto] ?? null,
     motivo: 'Venta (datos del prototipo)',
-    created_at: CUANDO[v.dia],
+    created_at: cuandoVenta(v),
   }));
 
   const { error: eSalidas } = await admin.from('movimientos_inventario').insert(salidas);
   if (eSalidas) morir('movimientos de venta', eSalidas);
 
+  if (ENTREGAS.length) {
+    const { error } = await admin.from('movimientos_inventario').insert(
+      ENTREGAS.map((e) => ({
+        tenant_id: tenantId,
+        producto_id: idDeProducto[e.producto],
+        tipo: 'entrega',
+        cantidad: -e.cantidad,
+        cuarto_id: idDeCuarto[e.cuarto] ?? null,
+        motivo: 'Entrega a habitación',
+        created_at: e.ts,
+      }))
+    );
+    if (error) morir('entregas a habitaciones', error);
+  }
+
   const { error: eVentas } = await admin.from('ventas').insert(
-    VENTAS.map((v) => ({
+    LISTA_VENTAS.map((v) => ({
       tenant_id: tenantId,
       concepto: v.producto,
       producto_id: idDeProducto[v.producto],
@@ -383,7 +506,7 @@ if (yaSembrado) {
       monto: v.monto,
       medio: v.medio,
       // `turno_id` va nulo: en el prototipo TURNO arranca en null y aquí también.
-      created_at: CUANDO[v.dia],
+      created_at: cuandoVenta(v),
     }))
   );
   if (eVentas) morir('ventas', eVentas);
@@ -396,7 +519,10 @@ if (yaSembrado) {
     if (error) morir(`stock de ${p.nombre}`, error);
   }
 
-  console.log(`  Stock e histórico: ${compras.length} compras y ${VENTAS.length} ventas del mockup.`);
+  console.log(
+    `  Stock e histórico: ${compras.length} compras y ${LISTA_VENTAS.length} ventas` +
+      (rica ? ` en 14 días, más ${ENTREGAS.length} entregas a habitaciones.` : ' del mockup.')
+  );
   console.log('    (papel higiénico y kit de aseo quedan bajos, como en el prototipo)');
 }
 
@@ -446,12 +572,15 @@ if (estadiasHay?.length) {
 
 // 7 · Caja ------------------------------------------------------------------
 
+// Con `--rica`, el saldo es lo que dejó el último turno cerrado del paso 9.
+const SALDO = rica ? CAJA_RICA : CAJA;
+
 const { error: eCaja } = await admin
   .from('caja_estado')
-  .upsert({ tenant_id: tenantId, ...CAJA }, { onConflict: 'tenant_id' });
+  .upsert({ tenant_id: tenantId, ...SALDO }, { onConflict: 'tenant_id' });
 
 if (eCaja) morir('caja', eCaja);
-console.log(`  Caja: S/ ${CAJA.saldo.toFixed(2)} de saldo.`);
+console.log(`  Caja: S/ ${SALDO.saldo.toFixed(2)} de saldo.`);
 
 // 8 · Personal --------------------------------------------------------------
 
@@ -483,6 +612,217 @@ for (const persona of PERSONAL) {
 }
 
 console.log(`  Personal: ${PERSONAL.length} del prototipo (${nuevos.length} creados ahora).`);
+
+// 9 · Histórico de la demo (solo con --rica) ---------------------------------
+
+/**
+ * Va al final porque todo lo de aquí apunta a `profiles`, y los perfiles los crea el
+ * trigger de auth en el paso 8. Antes de ese paso no existen.
+ *
+ * No se siembra `turno_conteos`: haría falta inventar el stock que había en cada cierre,
+ * y esos números no atarían con el kardex. Un conteo que no cuadra con el inventario es
+ * exactamente el registro que miente que este script evita en todo lo demás.
+ */
+if (rica) {
+  const { data: perfiles, error: ePerfiles } = await admin
+    .from('profiles')
+    .select('id, rol')
+    .eq('tenant_id', tenantId)
+    .eq('activo', true);
+
+  if (ePerfiles) morir('perfiles para el histórico', ePerfiles);
+
+  const admin1 = perfiles.find((p) => p.rol === 'administrador') ?? perfiles[0];
+  const recepcion = perfiles.find((p) => p.rol === 'recepcion') ?? admin1;
+
+  if (!admin1) morir('perfiles para el histórico', new Error('no hay ningún perfil activo'));
+
+  // --- turnos cerrados, con sus gastos y las alertas que dejan ---------------
+
+  let nGastos = 0;
+  let nAlertas = 0;
+
+  for (const [i, t] of TURNOS_DEMO.entries()) {
+    const quien = i % 2 === 0 ? recepcion.id : admin1.id;
+
+    const { data: turno, error: eTurno } = await admin
+      .from('turnos')
+      .insert({
+        tenant_id: tenantId,
+        usuario_id: quien,
+        estado: 'cerrado',
+        abierto_at: t.abierto_at,
+        cerrado_at: t.cerrado_at,
+        sencillo_apertura: t.apertura,
+        sencillo_dejado: t.dejado,
+        cerrado_por: quien,
+      })
+      .select('id')
+      .single();
+
+    if (eTurno) morir('turnos del histórico', eTurno);
+
+    const { error: eCierre } = await admin.from('cierres_caja').insert({
+      tenant_id: tenantId,
+      turno_id: turno.id,
+      usuario_id: quien,
+      recaudado: t.recaudado,
+      por_medio: t.por_medio,
+      efectivo_en_caja: t.dejado,
+      sencillo_dejado: t.dejado,
+    });
+
+    if (eCierre) morir('cierres de caja del histórico', eCierre);
+
+    for (const g of t.gastos) {
+      const productoId = g.producto ? idDeProducto[g.producto] : null;
+
+      const { error: eGasto } = await admin.from('gastos').insert({
+        tenant_id: tenantId,
+        turno_id: turno.id,
+        categoria: g.categoria,
+        producto_id: productoId,
+        cantidad: g.cantidad ?? null,
+        concepto: g.concepto,
+        monto: g.monto,
+        medio: g.medio,
+        justificacion: g.justificacion ?? null,
+        actor_id: quien,
+        created_at: t.cerrado_at,
+      });
+
+      if (eGasto) morir(`gasto "${g.concepto}"`, eGasto);
+      nGastos++;
+
+      // Un gasto fijo ES una compra: entra al kardex, igual que en registrar_gasto().
+      if (g.categoria === 'fijo') {
+        const { error } = await admin.from('movimientos_inventario').insert({
+          tenant_id: tenantId,
+          producto_id: productoId,
+          tipo: 'compra',
+          cantidad: g.cantidad,
+          turno_id: turno.id,
+          motivo: `Compra · ${g.concepto}`,
+          created_at: t.cerrado_at,
+        });
+        if (error) morir(`compra de "${g.concepto}"`, error);
+      }
+
+      /**
+       * Las alertas se derivan con la MISMA regla que `registrar_gasto()`, no se copian
+       * a mano: justificable siempre, y fijo solo si se pasa del 30 % sobre la referencia.
+       * Si alguien cambia `margen_gasto()`, esto se queda corto — pero al menos hoy dice
+       * lo mismo que diría la función, con el mismo texto.
+       */
+      const soles = (n) => n.toFixed(2);
+
+      if (g.categoria === 'justificable') {
+        const { error } = await admin.from('alertas').insert({
+          tenant_id: tenantId,
+          severidad: 'warning',
+          titulo: `Gasto fuera de lo habitual: ${g.concepto} · S/ ${soles(g.monto)}`,
+          detalle: `Justificación: ${g.justificacion}`,
+          origen: 'caja',
+          turno_id: turno.id,
+          requiere_validacion: true,
+          created_at: t.cerrado_at,
+        });
+        if (error) morir('alerta de gasto justificable', error);
+        nAlertas++;
+      } else {
+        const referencia = COSTO_REFERENCIA[g.producto] ?? 0;
+        const esperado = Math.round(referencia * g.cantidad * 100) / 100;
+        const unidad = PRODUCTOS.find((p) => p.nombre === g.producto)?.unidad ?? 'unid.';
+
+        if (referencia > 0 && g.monto > esperado * 1.3) {
+          const { error } = await admin.from('alertas').insert({
+            tenant_id: tenantId,
+            severidad: 'danger',
+            titulo: `Sobreprecio en ${g.producto}`,
+            detalle:
+              `Se pagó S/ ${soles(g.monto)} por ${g.cantidad} ${unidad}. ` +
+              `Al precio de referencia serían S/ ${soles(esperado)}.`,
+            origen: 'caja',
+            turno_id: turno.id,
+            requiere_validacion: true,
+            created_at: t.cerrado_at,
+          });
+          if (error) morir('alerta de sobreprecio', error);
+          nAlertas++;
+        }
+      }
+    }
+  }
+
+  console.log(
+    `  Turnos: ${TURNOS_DEMO.length} cerrados, con ${nGastos} gastos y ${nAlertas} alertas sin atender.`
+  );
+
+  // --- estadías ya cerradas -------------------------------------------------
+
+  const cerradas = construirEstadiasCerradas({
+    cuartos: CUARTOS,
+    documentos: LISTA_HUESPEDES.map((h) => h.num_doc),
+    ahora,
+  });
+
+  const { error: eCerradas } = await admin.from('estadias').insert(
+    cerradas.map((e) => {
+      const cuarto = CUARTOS.find((c) => c.numero === e.cuarto);
+      const tipo = TIPOS.find((t) => t.nombre === cuarto.tipo);
+      const total = tipo.amanecida * e.noches;
+
+      return {
+        tenant_id: tenantId,
+        huesped_id: idDeHuesped[e.documento],
+        cuarto_id: idDeCuarto[e.cuarto],
+        modo: 'rango',
+        noches: e.noches,
+        fecha_entrada: e.fecha_entrada,
+        fecha_salida: e.fecha_salida,
+        hora_entrada: e.hora_entrada,
+        hora_salida: e.hora_salida,
+        personas: e.personas,
+        tarifa_total: total,
+        deposito: tipo.deposito,
+        tarifa_detalle: {
+          total,
+          deposito: tipo.deposito,
+          moneda: 'PEN',
+          modo: 'rango',
+          detalle: [{ concepto: `${e.noches} noche(s) · ${tipo.nombre}`, monto: total }],
+        },
+        estado: 'cerrada',
+        created_at: e.hora_entrada,
+      };
+    })
+  );
+
+  if (eCerradas) morir('estadías cerradas', eCerradas);
+  console.log(`  Histórico de estadías: ${cerradas.length} cerradas en 14 días (2 hoy).`);
+
+  // --- reservas -------------------------------------------------------------
+
+  const reservas = construirReservas({ ahora });
+
+  const { error: eReservas } = await admin.from('reservas').insert(
+    reservas.map((r) => ({
+      tenant_id: tenantId,
+      nombre_contacto: r.contacto,
+      telefono: r.telefono,
+      tipo_id: idDeTipo[r.tipo],
+      fecha_entrada: r.entrada,
+      fecha_salida: r.salida,
+      personas: r.personas,
+      estado: r.estado,
+      origen: r.origen,
+      notas: r.notas,
+    }))
+  );
+
+  if (eReservas) morir('reservas', eReservas);
+  console.log(`  Reservas: ${reservas.length}, en sus cuatro estados (una vencida sin resolver).`);
+}
 
 // ---------------------------------------------------------------- resultado
 
