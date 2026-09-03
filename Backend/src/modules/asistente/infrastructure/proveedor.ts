@@ -12,8 +12,12 @@ export type Pendiente = {
 /**
  * Puerto del proveedor de IA. El asistente no sabe quién está detrás.
  *
- * `ADR-001` eligió Claude Haiku; `ADR-003` pasó a DeepSeek por coste. Hay un adaptador
- * por proveedor y `activo.ts` elige — que es exactamente para lo que existe este puerto.
+ * `ADR-001` eligió Claude Haiku; `ADR-003` pasó a DeepSeek y `ADR-004` lo dejó como el
+ * único. Hoy detrás solo hay `deepseek.ts`.
+ *
+ * El puerto se queda aunque haya un solo adaptador: es lo que mantiene el LLM fuera de
+ * `application/`, como pide ADR-002. Sin él, el caso de uso importaría infraestructura y
+ * no habría forma de probarlo sin red.
  */
 export type ProveedorIA = {
   nombre: string;

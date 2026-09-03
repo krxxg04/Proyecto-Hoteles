@@ -5,14 +5,15 @@ import type { Catalogo } from '../domain/tarjeta';
 import type { Pendiente } from './proveedor';
 
 /**
- * Lo que se le manda a un LLM, sea cual sea el proveedor.
+ * Lo que se le manda al LLM: el prompt, el catálogo y las herramientas.
  *
- * Vivía dentro del adaptador de Claude. Al entrar un segundo proveedor había que elegir
- * entre duplicarlo o sacarlo: duplicado, el día que alguien afine el prompt lo afina en
- * un solo proveedor y los dos dejan de comportarse igual.
+ * Separado del adaptador a propósito. Ahí dentro es transporte —URL, claves, forma de la
+ * petición—; aquí es lo que el modelo lee, que es lo que se toca cuando el asistente
+ * entiende mal algo. Y `sinDatosPersonales` es una regla de la Ley 29733, no un detalle
+ * de HTTP: mezclarla con el cliente la haría fácil de perder de vista.
  */
 
-/** Herramienta en el formato de la API de Anthropic, que es el que hablan los dos proveedores. */
+/** Herramienta en el formato de la API de Anthropic, que es el que habla DeepSeek. */
 export type Herramienta = {
   name: string;
   description: string;
@@ -89,18 +90,19 @@ export function contexto(catalogo: Catalogo): string {
 /**
  * La instrucción de una conversación a medias.
  *
- * `exigirHerramienta` existe porque los dos proveedores no se comportan igual: Anthropic
- * acepta `tool_choice: {type:'tool'}` y fuerza la acción, y DeepSeek solo admite `any`.
- * Donde no se puede forzar, se pide por texto y se comprueba la respuesta.
+ * La última línea pide la herramienta **por texto** porque DeepSeek no admite
+ * `tool_choice: {type:'tool', name}`, solo `any`. Con un proveedor que pudiera forzarla
+ * sobraría; aquí es lo único que sujeta la acción, y el adaptador además comprueba en la
+ * respuesta que el modelo no se haya cambiado de tema.
  */
-export function instruccionPendiente(pendiente: Pendiente, exigirHerramienta: boolean): string {
+export function instruccionPendiente(pendiente: Pendiente): string {
   return [
     `Estás completando un ${pendiente.accion} a medias.`,
     `Ya tienes: ${JSON.stringify(sinDatosPersonales(pendiente.parametros))}`,
     `Falta: ${pendiente.falta.join(', ')}.`,
     'El mensaje del usuario responde a eso. Devuelve TODOS los campos: los que ya tenías',
     'sin cambiar, más los que puedas deducir del mensaje.',
-    ...(exigirHerramienta ? [`Llama obligatoriamente a la herramienta \`${pendiente.accion}\`.`] : []),
+    `Llama obligatoriamente a la herramienta \`${pendiente.accion}\`.`,
   ].join('\n');
 }
 

@@ -7,6 +7,7 @@ import {
   detectarEstado,
   detectarMedio,
   detectarProducto,
+  limpiarNombre,
 } from './reglas';
 import type { Catalogo } from './tarjeta';
 
@@ -69,8 +70,25 @@ export function extraerCampo(
     case 'banco':
       return texto.trim() || null;
 
-    // Texto libre: se toma tal cual, con mayúsculas y tildes.
-    case 'nombre':
+    /**
+     * El nombre de una persona, con sus mayúsculas y sus tildes.
+     *
+     * Antes se tomaba el mensaje entero si medía dos caracteres, y eso guardaba al
+     * huésped como «se llama Rosa Vargas con DNI 45889012»: la muletilla dentro del
+     * nombre y el documento ignorado, porque al devolver algo no nulo el asistente
+     * daba el campo por resuelto y no llegaba a preguntarle al modelo.
+     *
+     * Ahora se quitan las muletillas y, si aun así quedan dígitos, se devuelve `null`
+     * a propósito: en esa frase viene más de un dato —el DNI, un teléfono— y quien
+     * puede repartirlos entre los dos campos de una sola vez es el LLM.
+     */
+    case 'nombre': {
+      const limpio = limpiarNombre(texto);
+      if (/\d/.test(limpio)) return null;
+      return limpio.length >= 2 ? limpio : null;
+    }
+
+    // Texto libre de verdad: un motivo o una búsqueda son la frase entera.
     case 'motivo':
     case 'texto':
       return texto.trim().length >= 2 ? texto.trim() : null;

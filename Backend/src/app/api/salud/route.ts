@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { faltaClaveIA, proveedorActivo } from '@/modules/asistente/infrastructure/activo';
+import { faltaClaveIA, proveedorActivo } from '@/modules/asistente/infrastructure/deepseek';
 import { r2Configurado } from '@/modules/medios/infrastructure/r2';
 import { clienteAdmin } from '@/shared/supabase/admin';
 

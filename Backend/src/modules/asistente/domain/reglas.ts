@@ -81,15 +81,21 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
   // Solo rellena lo que el texto dice; el resto se pregunta después.
   if (/\bcheck ?-?in|se queda|se quedan|entrada|llego (una|un|el|la)\b.*\b(pareja|senor|senora|chico|chica|persona|cliente|huesped)|hospedar/.test(t)) {
     const parametros: Record<string, unknown> = {};
-    const personas = personasPorPalabra(t) ?? detectarCantidad(t.replace(/\d+\s*(noche|hora)/g, ' '));
+    /**
+     * Se busca sobre `sinCuarto` y sin la duración, o cualquier número de la frase acaba
+     * contado como personas: "se queda dos noches en la 205" daba `personas: 205`, que
+     * la validación rechaza después con un mensaje que no explica nada.
+     */
+    const personas =
+      personasPorPalabra(t) ?? detectarCantidad(sinCuarto.replace(SIN_DURACION, ' '));
     const modo = detectarModo(t);
-    const noches = t.match(/(\d+)\s*noche/);
-    const horas = t.match(/(\d+)\s*hora/);
+    const noches = cantidadAntesDe(t, 'noche');
+    const horas = cantidadAntesDe(t, 'hora');
 
     if (cuarto) parametros.cuarto = cuarto;
     if (modo) parametros.modo = modo;
-    if (noches) parametros.noches = Number(noches[1]);
-    if (horas) parametros.horas = Number(horas[1]);
+    if (noches) parametros.noches = noches;
+    if (horas) parametros.horas = horas;
     if (personas) parametros.personas = personas;
     if (medio) parametros.medio = medio;
 
@@ -140,6 +146,36 @@ export function detectarCuarto(t: string, catalogo: Catalogo): string | null {
   return null;
 }
 
+/** Las palabras de `NUMEROS`, listas para meter en una regex. */
+const PALABRAS_NUMERO = Object.keys(NUMEROS).join('|');
+
+/**
+ * "2 noches" y "dos noches". Antes solo se leía la primera forma.
+ *
+ * `NUMEROS` ya existía y `detectarCantidad` ya lo usaba, pero la regla de check-in
+ * buscaba `/(\d+)\s*noche/` a pelo, así que "dos noches" dejaba el modo en `rango` y
+ * las noches sin poner — y el asistente las preguntaba otra vez.
+ */
+export function cantidadAntesDe(t: string, unidad: string): number | null {
+  const digito = t.match(new RegExp(`(\\d+)\\s*${unidad}`));
+  if (digito) return Number(digito[1]);
+
+  const palabra = t.match(new RegExp(`\\b(${PALABRAS_NUMERO})\\s+${unidad}`));
+  return palabra ? NUMEROS[palabra[1]] : null;
+}
+
+/**
+ * Quita la duración para que no se cuele como número de personas.
+ *
+ * Sin esto, "dos noches" sin la palabra "pareja" delante haría que `detectarCantidad`
+ * devolviera 2 personas leyendo el "dos" de las noches. La versión vieja solo borraba
+ * la forma con dígitos.
+ */
+export const SIN_DURACION = new RegExp(
+  `\\b(\\d+|${PALABRAS_NUMERO})\\s*(noche|hora)\\w*`,
+  'g'
+);
+
 export function detectarCantidad(t: string): number | null {
   const digito = t.match(/\b(\d{1,3})\b/);
   if (digito) return Number(digito[1]);
@@ -183,9 +219,20 @@ export function detectarEstado(t: string): EstadoCuarto | null {
 }
 
 /** Quita las muletillas que quedan pegadas al nombre: "antes julia" -> "julia". */
-function limpiarNombre(s: string): string {
+/**
+ * Quita lo que la gente pone delante de un nombre.
+ *
+ * Se exporta porque el extractor de campos lo necesita: cuando el asistente pregunta
+ * "¿A nombre de quién?", la respuesta llega como "se llama Rosa Vargas", y guardar eso
+ * literal deja al huésped registrado con la muletilla incluida.
+ *
+ * Sin distinguir mayúsculas: aquí entra el texto tal cual lo escribió la persona, no el
+ * normalizado, porque el nombre se guarda con sus tildes y sus mayúsculas.
+ */
+export function limpiarNombre(s: string): string {
   let n = s.trim();
-  const muletillas = /^(antes|alguna vez|aca|aqui|el|la|los|las|sr|sra|senor|senora|don|dona)\s+/;
+  const muletillas =
+    /^(se llama|a nombre de|el nombre es|se llaman|son|nombre|es|para|antes|alguna vez|aca|aqui|el|la|los|las|sr|sra|senor|senora|don|dona)\s+/i;
   while (muletillas.test(n)) n = n.replace(muletillas, '');
   return n.replace(/\s+/g, ' ').trim();
 }

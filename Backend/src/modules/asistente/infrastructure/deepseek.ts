@@ -12,17 +12,28 @@ import {
 } from './indicaciones';
 
 /**
- * Adaptador de DeepSeek. Solo se llama cuando las reglas no reconocieron el comando.
+ * El proveedor de IA. Único (ADR-003 y ADR-004), y solo se llama cuando las reglas no
+ * reconocieron el comando.
  *
  * Va por el endpoint en **formato Anthropic** que DeepSeek publica, así que se reutiliza
  * el mismo SDK y el mismo formato de herramientas. No es un atajo: la alternativa era
- * traducir los esquemas al formato de OpenAI y mantener dos conversiones.
+ * traducir los esquemas al formato de OpenAI y mantener esa conversión.
  *
- * Modelo: DeepSeek mapea los nombres de Claude a los suyos, y Haiku/Sonnet caen en
- * `deepseek-v4-flash`, que es el más barato de su catálogo. Por eso el valor por defecto
- * es un nombre de Claude aunque detrás no haya un Claude — es lo que pide su API.
+ * Por eso `@anthropic-ai/sdk` sigue en las dependencias aunque ya no haya adaptador de
+ * Claude: aquí es el cliente del protocolo que habla DeepSeek, no el de Anthropic.
  *
- * Tres límites documentados de su compatibilidad, y cada uno cambia el código:
+ * Modelo: `deepseek-v4-flash`, el más barato de su catálogo, con su nombre nativo. Su
+ * documentación solo describe pasar alias de Claude por este endpoint, pero el nombre
+ * propio funciona —comprobado contra la API— y un alias es una indirección que ellos
+ * pueden cambiar sin avisar.
+ *
+ * Cuatro cosas de su comportamiento, y cada una cambia el código:
+ *
+ *   0. **Razona por defecto, y sale carísimo.** Devuelve un bloque `thinking` antes de la
+ *      herramienta: medido, 634 tokens de salida contra 70 con el razonamiento apagado —
+ *      nueve veces más, para la misma respuesta. Y con `max_tokens` corto se lo come
+ *      entero y no llega a emitir el `tool_use`, así que el asistente diría "no entendí"
+ *      siempre. Para clasificar una frase y rellenar un esquema no aporta nada.
  *
  *   1. `tool_choice: {type:'tool', name}` NO existe: solo `none`, `auto` y `any`. Así que
  *      la acción a medias se pide por texto y se comprueba en la respuesta (abajo).
@@ -33,7 +44,8 @@ import {
  */
 
 const BASE = 'https://api.deepseek.com/anthropic';
-const MODELO = process.env.MODELO_IA ?? 'claude-haiku-4-5';
+
+const MODELO = process.env.MODELO_IA ?? 'deepseek-v4-flash';
 
 export function proveedorDeepSeek(): ProveedorIA {
   return {
@@ -49,12 +61,15 @@ export function proveedorDeepSeek(): ProveedorIA {
       const sistema = [
         SISTEMA,
         contexto(catalogo),
-        ...(pendiente ? [instruccionPendiente(pendiente, true)] : []),
+        ...(pendiente ? [instruccionPendiente(pendiente)] : []),
       ].join('\n\n');
 
       const respuesta = await cliente.messages.create({
         model: MODELO,
         max_tokens: 1024,
+        // Ver el punto 0 de la cabecera: sin esto son nueve veces más tokens de salida
+        // para la misma tarjeta, y el riesgo de que el razonamiento agote `max_tokens`.
+        thinking: { type: 'disabled' },
         system: sistema,
         tools: herramientas(permitidas ?? ACCIONES),
         // `any` obliga a llamar a alguna herramienta, que es lo único que necesitamos:
@@ -90,4 +105,19 @@ export function proveedorDeepSeek(): ProveedorIA {
       } satisfies Intencion & { confianza: number };
     },
   };
+}
+
+/**
+ * `null` si no hay clave: el asistente funciona solo con reglas, cubre las 9 acciones y lo
+ * dice en `GET /api/salud`. Degradar en silencio sería peor — nadie sabría que la mitad
+ * del asistente no está viva.
+ */
+export function proveedorActivo(): ProveedorIA | null {
+  if (!process.env.DEEPSEEK_API_KEY) return null;
+  return proveedorDeepSeek();
+}
+
+/** Para `GET /api/salud`: qué falta, dicho con el nombre exacto de la variable. */
+export function faltaClaveIA(): string {
+  return 'solo reglas (falta DEEPSEEK_API_KEY)';
 }
