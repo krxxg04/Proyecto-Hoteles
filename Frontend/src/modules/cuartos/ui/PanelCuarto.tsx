@@ -264,7 +264,8 @@ export function PanelCuarto({
               })}
             </div>
             <p className="mt-2 text-[11px] text-tx-muted">
-              Recepción y limpieza pueden actualizarlo. Queda registrado en el historial.
+              Limpieza y mantenimiento mueven el cuarto por el piso; disponible, ocupada e
+              inspección las cambia recepción. Queda registrado en el historial.
             </p>
           </div>
 

@@ -6,7 +6,7 @@ import { BrushCleaning, CheckCheck, ClipboardList, Wrench } from 'lucide-react';
 import type { CuartoConTipo, EstadoCuarto } from '../domain/tipos';
 import { cambiarEstadoCuarto } from '../infrastructure/acciones';
 import { ESTILO_ESTADO } from './estados';
-import { ORDEN_TRABAJO, SIGUIENTE_PASO, ordenarPorTrabajo } from './flujo';
+import { PASOS_DE_PISO, SIGUIENTE_PASO, ordenarPorTrabajo } from './flujo';
 import { Boton, Chip, ErrorCaja } from '@/shared/ui/primitivos';
 import { useEnVivo } from '@/shared/ui/useEnVivo';
 import { PuntoEnVivo } from '@/shared/ui/PuntoEnVivo';
@@ -97,10 +97,10 @@ export function VistaHabitacionesPiso({ cuartos }: { cuartos: CuartoConTipo[] })
   const enVivo = useEnVivo('cuartos');
 
   /** Lo que le toca a este rol. El orden es el del flujo, no el del número. */
-  const mios = ordenarPorTrabajo(cuartos.filter((c) => ORDEN_TRABAJO.includes(c.estado)));
+  const mios = ordenarPorTrabajo(cuartos.filter((c) => PASOS_DE_PISO.includes(c.estado)));
 
   /** El resto, solo para mirar: ocupadas, libres y las que ya están listas. */
-  const resto = cuartos.filter((c) => !ORDEN_TRABAJO.includes(c.estado));
+  const resto = cuartos.filter((c) => !PASOS_DE_PISO.includes(c.estado));
 
   function cambiar(cuarto: CuartoConTipo, estado: EstadoCuarto) {
     setError(null);

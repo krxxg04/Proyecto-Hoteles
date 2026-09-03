@@ -24,8 +24,18 @@ export const SIGUIENTE_PASO: Partial<
   mantenimiento: { estado: 'limpieza', verbo: 'Ya está arreglada', icono: 'BrushCleaning' },
 };
 
-/** Lo que hay por atender, en orden de flujo y no de número. */
+/** Lo que hay por atender en el hostal, en orden de flujo y no de número. */
 export const ORDEN_TRABAJO: EstadoCuarto[] = ['inspeccion', 'limpieza', 'mantenimiento'];
+
+/**
+ * Y de eso, lo que quien está en el piso puede mover de verdad.
+ *
+ * `inspeccion` queda fuera: es la revisión de salida y solo la hace recepción. Estaba
+ * dentro y la vista de piso le ofrecía a limpieza un botón «Revisado, a limpiar» que la
+ * base rechaza — un botón que invita a fallar es peor que no tenerlo. Los cuartos en
+ * inspección le siguen apareciendo, pero en «el resto del hostal · solo para ver».
+ */
+export const PASOS_DE_PISO: EstadoCuarto[] = ['limpieza', 'mantenimiento'];
 
 export function ordenarPorTrabajo<T extends { estado: EstadoCuarto; numero: string }>(
   cuartos: T[]
