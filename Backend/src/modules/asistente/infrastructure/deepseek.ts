@@ -67,6 +67,16 @@ export function proveedorDeepSeek(): ProveedorIA {
       const respuesta = await cliente.messages.create({
         model: MODELO,
         max_tokens: 1024,
+        /**
+         * Determinista. La misma frase tiene que dar la misma tarjeta.
+         *
+         * Sin esto, "se rompió el espejo del 105" salía unas veces como una pregunta por
+         * el producto y otras como "no entendí": el espejo no está en el catálogo, la
+         * regla no dispara y decide el modelo. Para un guion de demo —y para poder
+         * reproducir un fallo que alguien reporta— la variación es un problema, no una
+         * gracia. Su documentación lista `temperature` como soportada.
+         */
+        temperature: 0,
         // Ver el punto 0 de la cabecera: sin esto son nueve veces más tokens de salida
         // para la misma tarjeta, y el riesgo de que el razonamiento agote `max_tokens`.
         thinking: { type: 'disabled' },

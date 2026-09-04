@@ -103,11 +103,18 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
   }
 
   // --- Escrituras.
-  if (/\bse rompio|rompieron|se perdio|perdieron|falta(n)?|dañad|danad|rot(o|a)|malogr/.test(t)) {
+  if (/\b(se rompio|rompieron|se perdio|perdieron|falta(n)?|desaparecio|desaparecieron|no esta|danad|rot(o|a)|malogr)/.test(t)) {
     if (producto) {
+      // "se perdio", "faltan", "desaparecio" son perdida; "se rompio", "danado" son dano.
+      const perdida = /\b(se perdio|perdieron|falta(n)?|desaparecio|desaparecieron|no esta)/.test(t);
       return {
         accion: 'reportar_danio',
-        parametros: { producto, cantidad, motivo: texto.trim() },
+        parametros: {
+          producto,
+          cantidad,
+          tipo: perdida ? 'perdida' : 'danio',
+          motivo: texto.trim(),
+        },
       };
     }
   }

@@ -332,7 +332,9 @@ async function despachar(tarjeta: TarjetaAccion): Promise<Resultado<unknown>> {
       return ajustarStock({
         producto_id: producto.id,
         cantidad: p.cantidad as number,
-        tipo: 'danio',
+        // El `.default('danio')` del esquema no llega hasta aquí: `limpiarVacios` quita
+        // lo que el modelo no puso, así que el respaldo se repite en el punto de uso.
+        tipo: (p.tipo as 'danio' | 'perdida') ?? 'danio',
         motivo: p.motivo as string,
       });
 
@@ -418,7 +420,7 @@ function resumir(
     case 'registrar_compra':
       return `Ingresar ${cant}${nombre} al inventario.`;
     case 'reportar_danio':
-      return `Descontar ${cant}${nombre} por daño o pérdida.`;
+      return `Descontar ${cant}${nombre} por ${p.tipo === 'perdida' ? 'pérdida' : 'daño'}.`;
     case 'cambiar_estado_cuarto':
       return `Poner la habitación ${hab} en "${p.estado}".`;
     case 'consultar_cuarto':

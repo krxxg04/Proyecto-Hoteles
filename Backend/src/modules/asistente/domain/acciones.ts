@@ -83,9 +83,17 @@ const PARAMETROS = {
     cantidad: z.coerce.number().positive(),
     motivo: z.string().optional(),
   }),
+  /**
+   * `tipo` distingue lo que el esquema ya distinguia y el asistente no usaba: el enum
+   * `tipo_movimiento` tiene `danio` y `perdida` desde el primer dia, y aqui se mandaba
+   * siempre `danio`. Los dos restan stock igual, pero el kardex decia "dano" cuando una
+   * toalla se habia perdido — y eso cambia lo que se hace despues: un dano se repone,
+   * una perdida repetida en la misma habitacion se investiga.
+   */
   reportar_danio: z.object({
     producto: z.string().min(1),
     cantidad: z.coerce.number().positive().default(1),
+    tipo: z.enum(['danio', 'perdida']).default('danio'),
     motivo: z.string().min(3),
   }),
   cambiar_estado_cuarto: z.object({
@@ -121,7 +129,9 @@ export const DESCRIPCION_ACCION: Record<Accion, string> = {
   vender_producto: 'Cobrar un producto a un huésped. Ej: "2 aguas a la 203, con yape".',
   entregar_a_cuarto: 'Llevar un insumo a una habitación sin cobrar. Ej: "a la 203 dos toallas".',
   registrar_compra: 'Entró mercadería al hostal. Ej: "llegaron 24 aguas".',
-  reportar_danio: 'Algo se rompió, se perdió o falta. Ej: "se rompió un vaso en la 105".',
+  reportar_danio:
+    'Algo se rompió, se perdió o falta. Ej: "se rompió un vaso en la 105". ' +
+    'Usa tipo="perdida" si desapareció o falta, y tipo="danio" si se rompió o se dañó.',
   cambiar_estado_cuarto: 'Cambiar el estado de una habitación. Ej: "la 105 ya está limpia".',
   consultar_cuarto: 'Preguntar por el estado de una habitación. Ej: "¿la 105 está lista?".',
   consultar_stock: 'Preguntar cuánto queda de un producto. Ej: "¿cuánta agua hay?".',
