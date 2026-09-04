@@ -22,6 +22,8 @@ export type ContextoConversacion = {
   accion: Accion;
   parametros: Record<string, unknown>;
   esperando?: string;
+  /** Intentos fallidos sobre ese campo. Ver el tipo del backend. */
+  intentos?: number;
 };
 
 export type Interpretacion =

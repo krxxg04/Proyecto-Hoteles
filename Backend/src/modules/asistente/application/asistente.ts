@@ -94,6 +94,26 @@ export async function interpretar(
 
   if (pendientes.length > 0) {
     const siguiente = pendientes[0];
+
+    /**
+     * Repetir la misma pregunta cuando la respuesta no sirvió deja al asistente en
+     * bucle. Pasó con «se rompió el espejo del 105»: pide el producto, «espejo» no
+     * está en el catálogo, y el mismo faltante vuelve a salir cada vez.
+     *
+     * Se cuentan los intentos sobre ESE campo. Uno más se concede porque la segunda
+     * respuesta suele ser la buena («espejo» → «toallas»); al segundo fallo se
+     * abandona diciendo qué no se entendió, que es lo que permite salir.
+     */
+    const intentos = contexto?.esperando === siguiente ? (contexto.intentos ?? 0) + 1 : 0;
+
+    if (intentos >= LIMITE_INTENTOS) {
+      return exito({
+        tipo: 'sin_entender',
+        mensaje: mensajeAtasco(siguiente, texto, catalogo),
+        sugerencias,
+      });
+    }
+
     return exito({
       tipo: 'pregunta',
       pregunta: PREGUNTA_CAMPO[siguiente] ?? `¿${siguiente}?`,
@@ -101,6 +121,7 @@ export async function interpretar(
         accion: paso.intencion.accion,
         parametros: paso.intencion.parametros,
         esperando: siguiente,
+        intentos,
       },
       avance: {
         completos: Object.keys(paso.intencion.parametros),
@@ -113,6 +134,40 @@ export async function interpretar(
     tipo: 'tarjeta',
     tarjeta: armarTarjeta(paso.intencion, catalogo, paso.origen, paso.confianza),
   });
+}
+
+// ------------------------------------------------------------ salir del atasco
+
+/** Dos respuestas fallidas sobre el mismo campo y se abandona. */
+const LIMITE_INTENTOS = 2;
+
+/**
+ * Qué se le dice a alguien cuando su respuesta no cabe en el campo que se preguntó.
+ *
+ * No basta con «no entendí»: la persona ya contestó una vez y le volvimos a preguntar
+ * lo mismo. Aquí hay que decir **qué** no se reconoció y, cuando existe, cuál es el
+ * camino que sí funciona — que es el caso del espejo roto: no hay forma de reportar
+ * daño de algo que no es inventario, pero sí de mandar el cuarto a mantenimiento.
+ */
+function mensajeAtasco(campo: string, texto: string, catalogo: Catalogo): string {
+  const dicho = texto.trim();
+
+  if (campo === 'producto') {
+    const lista = catalogo.productos.map((p) => p.nombre).join(', ');
+    return (
+      `No tengo «${dicho}» en el catálogo. Los productos son: ${lista}. ` +
+      'Si lo que se rompió es parte del cuarto y no del inventario, mándalo a ' +
+      'mantenimiento: «la 105 a mantenimiento».'
+    );
+  }
+
+  if (campo === 'cuarto') {
+    const lista = catalogo.cuartos.map((c) => c.numero).join(', ');
+    return `No reconozco «${dicho}» como habitación. Las de este hostal son: ${lista}.`;
+  }
+
+  const comoSeLlama = PREGUNTA_CAMPO[campo] ?? campo;
+  return `No pude leer «${dicho}» como respuesta a «${comoSeLlama}». Dilo de otra forma o usa el formulario.`;
 }
 
 // ------------------------------------------------------------ interpretación

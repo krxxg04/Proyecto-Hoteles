@@ -40,6 +40,14 @@ export type ContextoConversacion = {
   parametros: Record<string, unknown>;
   /** El campo que se acaba de preguntar. La respuesta se lee como ese campo. */
   esperando?: string;
+  /**
+   * Cuántas veces se ha preguntado ESE mismo campo sin sacar nada.
+   *
+   * Sin este contador el asistente entra en bucle: "se rompió el espejo del 105" pide
+   * el producto, "espejo" no está en el catálogo, y la misma respuesta produce el mismo
+   * faltante para siempre. Con dos intentos fallidos se abandona y se dice por qué.
+   */
+  intentos?: number;
 };
 
 export type Interpretacion =
