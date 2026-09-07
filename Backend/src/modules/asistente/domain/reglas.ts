@@ -12,6 +12,48 @@ import type { Catalogo } from './tarjeta';
 
 export type Intencion = { accion: Accion; parametros: Record<string, unknown> };
 
+/**
+ * Disparadores por palabra clave, uno por acción de escritura.
+ *
+ * Se nombran aparte (en vez de vivir sueltos dentro de `interpretarConReglas`) porque
+ * `accionSugerida()` los reutiliza para clasificar SIN exigir que cuarto o producto
+ * resuelvan contra el catálogo — que es justo lo que `interpretarConReglas` sí exige
+ * antes de devolver algunas de estas acciones.
+ */
+const DISPARADOR_CHECKIN =
+  /\bcheck ?-?in|se queda|se quedan|entrada|llego (una|un|el|la)\b.*\b(pareja|senor|senora|chico|chica|persona|cliente|huesped)|hospedar/;
+/**
+ * "rompio"/"perdio" a secas se agregaron junto a "se rompio"/"se perdio": en español es
+ * tan natural decir "rompió un vaso" como "se rompió un vaso", y la versión sin "se" no
+ * disparaba nada — la frase se perdía entera, no solo el producto sin catálogo.
+ */
+const DISPARADOR_DANIO_O_PERDIDA =
+  /\b(se rompio|rompio|rompieron|se perdio|perdio|perdieron|falta(n)?|desaparecio|desaparecieron|no esta|danad|rot(o|a)|malogr)/;
+const DISPARADOR_PERDIDA = /\b(se perdio|perdio|perdieron|falta(n)?|desaparecio|desaparecieron|no esta)/;
+const DISPARADOR_COMPRA = /\bllego|llegaron|compramos|compre|ingreso|entro|recibimos\b/;
+const DISPARADOR_VENTA = /\bcobra|cobrale|vende|vendele|venta|paga|pago|pagaron\b/;
+const DISPARADOR_ENTREGA = /\blleva|llevale|entrega|entregale|sube|subele|manda|mandale\b/;
+
+/**
+ * Qué acción sugiere el texto por sus palabras clave, sin resolver nada contra el
+ * catálogo.
+ *
+ * Existe para una sola cosa: en `continuar()`, cuando a mitad de una conversación
+ * pendiente llega un mensaje nuevo, detectar que en realidad es OTRA acción antes de
+ * forzarlo a rellenar el campo que se estaba preguntando. `interpretarConReglas` no
+ * sirve para esto porque, por ejemplo, la rama de daño/pérdida exige el producto ya
+ * resuelto — «se rompió un ventilador» (fuera de catálogo) le devuelve `null` igual
+ * que una frase cualquiera, y la conversación vieja se comía el mensaje.
+ */
+export function accionSugerida(t: string): Accion | null {
+  if (DISPARADOR_CHECKIN.test(t)) return 'registrar_checkin';
+  if (DISPARADOR_DANIO_O_PERDIDA.test(t)) return 'reportar_danio';
+  if (DISPARADOR_COMPRA.test(t)) return 'registrar_compra';
+  if (DISPARADOR_VENTA.test(t)) return 'vender_producto';
+  if (DISPARADOR_ENTREGA.test(t)) return 'entregar_a_cuarto';
+  return null;
+}
+
 const NUMEROS: Record<string, number> = {
   un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6,
   siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12,
@@ -96,7 +138,7 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
 
   // --- Check-in: la frase suelta ("llego una pareja, doble, 2 noches, efectivo").
   // Solo rellena lo que el texto dice; el resto se pregunta después.
-  if (/\bcheck ?-?in|se queda|se quedan|entrada|llego (una|un|el|la)\b.*\b(pareja|senor|senora|chico|chica|persona|cliente|huesped)|hospedar/.test(t)) {
+  if (DISPARADOR_CHECKIN.test(t)) {
     const parametros: Record<string, unknown> = {};
     /**
      * Se busca sobre `sinCuarto` y sin la duración, o cualquier número de la frase acaba
@@ -120,10 +162,10 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
   }
 
   // --- Escrituras.
-  if (/\b(se rompio|rompieron|se perdio|perdieron|falta(n)?|desaparecio|desaparecieron|no esta|danad|rot(o|a)|malogr)/.test(t)) {
+  if (DISPARADOR_DANIO_O_PERDIDA.test(t)) {
     if (producto) {
       // "se perdio", "faltan", "desaparecio" son perdida; "se rompio", "danado" son dano.
-      const perdida = /\b(se perdio|perdieron|falta(n)?|desaparecio|desaparecieron|no esta)/.test(t);
+      const perdida = DISPARADOR_PERDIDA.test(t);
       return {
         accion: 'reportar_danio',
         parametros: {
@@ -136,11 +178,11 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
     }
   }
 
-  if (/\bllego|llegaron|compramos|compre|ingreso|entro|recibimos\b/.test(t)) {
+  if (DISPARADOR_COMPRA.test(t)) {
     if (producto) return { accion: 'registrar_compra', parametros: { producto, cantidad } };
   }
 
-  if (/\bcobra|cobrale|vende|vendele|venta|paga|pago|pagaron\b/.test(t) || (producto && medio)) {
+  if (DISPARADOR_VENTA.test(t) || (producto && medio)) {
     if (producto) {
       return {
         accion: 'vender_producto',
@@ -149,7 +191,7 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
     }
   }
 
-  if (/\blleva|llevale|entrega|entregale|sube|subele|manda|mandale\b/.test(t) || (numeroDicho && producto)) {
+  if (DISPARADOR_ENTREGA.test(t) || (numeroDicho && producto)) {
     if (numeroDicho && producto) {
       return { accion: 'entregar_a_cuarto', parametros: { producto, cantidad, cuarto: numeroDicho } };
     }

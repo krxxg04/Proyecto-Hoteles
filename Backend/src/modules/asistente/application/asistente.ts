@@ -5,7 +5,7 @@ import { conOrigen } from '@/shared/origen';
 import { exito, fallo, type Resultado } from '@/shared/resultado';
 import { ETIQUETA_ESTADO, type EstadoCuarto } from '@/modules/cuartos/domain/tipos';
 import type { Rol } from '@/shared/dominio/rol';
-import { normalizar, interpretarConReglas, type Intencion } from '../domain/reglas';
+import { normalizar, interpretarConReglas, accionSugerida, type Intencion } from '../domain/reglas';
 import { extraerCampo } from '../domain/campos';
 import {
   ACCIONES_POR_ROL,
@@ -27,6 +27,7 @@ import type {
 } from '../domain/tarjeta';
 import { cargarCatalogo } from '../infrastructure/catalogo';
 import { proveedorActivo } from '../infrastructure/deepseek';
+import { registrarMensaje, marcarMensaje } from '../infrastructure/bitacora';
 
 import { registrarVenta } from '@/modules/ventas/application/ventas';
 import { registrarCompra, entregarACuarto, ajustarStock } from '@/modules/inventario/application/stock';
@@ -62,7 +63,19 @@ export async function interpretar(
 
   const paso = continuacion ?? arranque;
 
+  /**
+   * Bitácora de lo que se pidió: el texto, qué acción detectó y en qué terminó. Un
+   * extra, no el motivo de la llamada — `registrarMensaje` se traga sus propios
+   * errores para no tumbar la conversación si la escritura falla.
+   */
+  const registrar = (
+    resultado: Interpretacion['tipo'],
+    accion?: Accion,
+    origen?: TarjetaAccion['origen']
+  ) => registrarMensaje({ texto, resultado, accion: accion ?? null, origen: origen ?? null });
+
   if (!paso) {
+    await registrar('sin_entender');
     return exito({
       tipo: 'sin_entender',
       mensaje: 'No entendí esa. Puedes decirlo de otra forma o usar el formulario.',
@@ -78,6 +91,7 @@ export async function interpretar(
    * diciéndole que no tiene permiso. Datos personales que nunca iban a usarse.
    */
   if (!puedeAccion(sesion.rol, paso.intencion.accion)) {
+    await registrar('sin_entender', paso.intencion.accion, paso.origen);
     const quien = A_QUIEN_LE_TOCA[paso.intencion.accion];
     return exito({
       tipo: 'sin_entender',
@@ -106,6 +120,7 @@ export async function interpretar(
    */
   const incoherencia = incoherenciaDe(paso.intencion, catalogo, sesion.rol);
   if (incoherencia) {
+    await registrar('sin_entender', paso.intencion.accion, paso.origen);
     return exito({ tipo: 'sin_entender', mensaje: incoherencia, sugerencias });
   }
 
@@ -124,6 +139,7 @@ export async function interpretar(
     const intentos = contexto?.esperando === siguiente ? (contexto.intentos ?? 0) + 1 : 0;
 
     if (intentos >= LIMITE_INTENTOS) {
+      await registrar('sin_entender', paso.intencion.accion, paso.origen);
       return exito({
         tipo: 'sin_entender',
         mensaje: mensajeAtasco(siguiente, texto, catalogo),
@@ -131,6 +147,7 @@ export async function interpretar(
       });
     }
 
+    await registrar('pregunta', paso.intencion.accion, paso.origen);
     return exito({
       tipo: 'pregunta',
       pregunta: PREGUNTA_CAMPO[siguiente] ?? `¿${siguiente}?`,
@@ -147,10 +164,10 @@ export async function interpretar(
     });
   }
 
-  return exito({
-    tipo: 'tarjeta',
-    tarjeta: armarTarjeta(paso.intencion, catalogo, paso.origen, paso.confianza),
-  });
+  const tarjeta = armarTarjeta(paso.intencion, catalogo, paso.origen, paso.confianza);
+  tarjeta.registro_id = (await registrar('tarjeta', paso.intencion.accion, paso.origen)) ?? undefined;
+
+  return exito({ tipo: 'tarjeta', tarjeta });
 }
 
 // --------------------------------------------------------- coherencia de negocio
@@ -204,7 +221,10 @@ function incoherenciaDe(intencion: Intencion, catalogo: Catalogo, rol: Rol): str
     );
   }
 
-  const personas = Number(p.personas ?? 0);
+  // El `.default(1)` del esquema no llega hasta aquí (mismo caso que `tipo` en
+  // reportar_danio): sin el respaldo, "personas" queda `undefined` y la comprobación
+  // de aforo no compara nada contra nadie.
+  const personas = Number(p.personas ?? 1);
   if (personas > cuarto.aforo) {
     return `La ${cuarto.numero} es para ${cuarto.aforo} persona${cuarto.aforo === 1 ? '' : 's'} y me dices ${personas}. Elige otra habitación o corrige el número.`;
   }
@@ -293,6 +313,25 @@ async function continuar(
   if (campo) {
     const valor = extraerCampo(campo, texto, catalogo);
     if (valor !== null && valor !== undefined && valor !== '') {
+      /**
+       * Antes de aceptar la respuesta, comprobar que el mensaje no sea en realidad
+       * OTRA cosa. «un agua con yape a la 302» deja pendiente el cuarto; si la
+       * siguiente frase es «se rompió un ventilador en la 101», `extraerCampo('cuarto', …)`
+       * encuentra el 101 y lo aceptaba como si fuera la respuesta a la venta abandonada
+       * — colaba una tarjeta de venta que nadie pidió.
+       *
+       * Se usa `accionSugerida()` y NO `interpretarConReglas()`: esta última exige el
+       * producto ya resuelto contra el catálogo antes de devolver `reportar_danio`, así
+       * que un producto fuera de catálogo (el caso típico de un daño) le daría `null`
+       * igual que a cualquier frase suelta, y el cambio de tema pasaría desapercibido.
+       */
+      const otraAccion = accionSugerida(normalizar(texto));
+      if (otraAccion && otraAccion !== contexto.accion) {
+        // No es una respuesta al campo pendiente: es una acción distinta. `null` hace
+        // que `interpretar()` lo trate como turno nuevo, empezando de cero.
+        return null;
+      }
+
       acumulado[campo] = valor;
       return { intencion: { accion: contexto.accion, parametros: acumulado }, origen: 'reglas', confianza: 1 };
     }
@@ -337,7 +376,9 @@ async function continuar(
  * el registro dice que la 105 cambió de estado, pero no si lo pidió la IA o recepción.
  */
 export async function ejecutar(tarjeta: TarjetaAccion): Promise<Resultado<unknown>> {
-  return conOrigen('asistente', () => despachar(tarjeta));
+  const resultado = await conOrigen('asistente', () => despachar(tarjeta));
+  await marcarMensaje(tarjeta.registro_id, resultado.ok, resultado.ok ? undefined : resultado.error);
+  return resultado;
 }
 
 async function despachar(tarjeta: TarjetaAccion): Promise<Resultado<unknown>> {
@@ -485,8 +526,16 @@ function resumir(
   switch (accion) {
     case 'registrar_checkin': {
       const estadia =
-        p.modo === 'horas' ? `${p.horas} horas` : p.modo === 'dia' ? 'el día' : `${p.noches} noches`;
-      const personas = p.personas === 1 ? '1 persona' : `${p.personas} personas`;
+        p.modo === 'horas'
+          ? `${p.horas} ${p.horas === 1 ? 'hora' : 'horas'}`
+          : p.modo === 'dia'
+            ? 'el día'
+            : `${p.noches} ${p.noches === 1 ? 'noche' : 'noches'}`;
+      // Mismo respaldo que en `incoherenciaDe`: sin frase que diga cuántas personas son,
+      // el esquema por defecto registra 1, y el resumen tiene que decir lo mismo que va
+      // a pasar al confirmar, no "undefined personas".
+      const numPersonas = (p.personas as number | undefined) ?? 1;
+      const personas = numPersonas === 1 ? '1 persona' : `${numPersonas} personas`;
       return `Check-in de ${p.nombre} en la ${hab}: ${estadia}, ${personas}, paga en ${p.medio}. El precio lo calcula el tarifario.`;
     }
     case 'vender_producto':

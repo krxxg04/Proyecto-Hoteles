@@ -19,6 +19,12 @@ export type TarjetaAccion = {
   /** Resumen en una línea, para que la recepcionista lea y confirme. */
   resumen: string;
   parametros: Record<string, unknown>;
+  /**
+   * Id de la fila que `interpretar()` ya dejó en `asistente_mensajes`. Viaja en la
+   * tarjeta para que, al confirmar o fallar, `ejecutar()` sepa cuál marcar — sin esto
+   * habría que buscarla por texto y quedaría ambiguo con mensajes repetidos.
+   */
+  registro_id?: string;
   /** Ids ya resueltos. Si falta alguno, `listo` es false. */
   referencias: { cuarto_id?: string; producto_id?: string };
   origen: 'reglas' | 'ia';

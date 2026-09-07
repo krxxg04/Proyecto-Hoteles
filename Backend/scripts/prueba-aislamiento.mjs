@@ -98,6 +98,7 @@ const TABLAS = [
   'reservas', 'inspecciones', 'caja_estado', 'turnos', 'turno_conteos',
   'incidencias', 'ventas', 'cierres_caja', 'tipo_cambio', 'alertas',
   'integraciones', 'medios', 'consentimientos', 'audit_log', 'gastos',
+  'asistente_mensajes',
 ];
 
 /** Sin `tenant_id`: `tenants` se filtra por `id` y los catálogos son globales a propósito. */
@@ -271,6 +272,10 @@ async function sembrarB() {
       turno_id: turno.id, categoria: 'justificable',
       concepto: 'Escobas de prueba', monto: 20, medio: 'efectivo',
       justificacion: 'Prueba de aislamiento',
+    }],
+    ['asistente_mensajes', {
+      usuario_id: usuarioBAdmin, rol: 'administrador',
+      texto: 'Mensaje de prueba', resultado: 'tarjeta',
     }],
   ];
 
@@ -467,6 +472,24 @@ const rpcVenta = await clienteA.rpc('registrar_venta', {
 });
 comprobar('registrar_venta() rechaza un producto de B', !!rpcVenta.error, rpcVenta.error ? '' : 'vendió stock ajeno');
 
+const { data: mensajeB } = await admin
+  .from('asistente_mensajes')
+  .select('id, confirmada')
+  .eq('tenant_id', tenantB)
+  .limit(1)
+  .single();
+await clienteA.rpc('marcar_mensaje_asistente', { p_id: mensajeB.id, p_confirmada: true });
+const { data: mensajeBTrasRpc } = await admin
+  .from('asistente_mensajes')
+  .select('confirmada')
+  .eq('id', mensajeB.id)
+  .single();
+comprobar(
+  'marcar_mensaje_asistente() no toca un mensaje de B',
+  mensajeBTrasRpc.confirmada === mensajeB.confirmada,
+  'lo marcó confirmada'
+);
+
 // --------------------------------------------------------- 5 · sin sesión
 
 bloque('5 · Sin sesión — `anon` no ve nada');
@@ -484,6 +507,7 @@ const FUNCIONES_CERRADAS = [
   ['turno_abierto', {}],
   ['cambiar_estado_cuarto', { p_cuarto_id: fixtureB.cuarto.id, p_estado: 'libre' }],
   ['registrar_venta', { p_producto_id: fixtureB.producto.id, p_cantidad: 1, p_medio: 'efectivo', p_cuarto_id: null }],
+  ['registrar_mensaje_asistente', { p_texto: 'x', p_resultado: 'sin_entender' }],
 ];
 
 for (const [fn, params] of FUNCIONES_CERRADAS) {
@@ -549,7 +573,7 @@ await admin.from('profiles').update({ dni: dniOriginalB }).eq('id', perfilDuplic
 
 bloque('6 · Matriz de roles dentro del mismo hostal (limpieza en B)');
 
-for (const tabla of ['ventas', 'turnos', 'huespedes', 'estadias', 'cierres_caja', 'audit_log']) {
+for (const tabla of ['ventas', 'turnos', 'huespedes', 'estadias', 'cierres_caja', 'audit_log', 'asistente_mensajes']) {
   const { data: hay } = await admin.from(tabla).select('tenant_id').eq('tenant_id', tenantB).limit(1);
   const { data, error } = await clienteLimpiezaB.from(tabla).select('*').limit(5);
   comprobar(

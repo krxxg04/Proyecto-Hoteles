@@ -63,7 +63,17 @@ export async function ajustarStock(
     return fallo(p.message, String(p.path[0]));
   }
 
-  await exigirRol(...ROLES_CAJA);
+  /**
+   * Daño y pérdida se quedan abiertos a quien limpia (`registrar_movimiento()` en SQL
+   * solo restringe 'compra' y 'ajuste'): es quien encuentra el problema y quien debe
+   * poder registrarlo en el momento. 'ajuste'/'devolucion' sí mueven stock sin que haya
+   * pasado nada visible, así que esos dos siguen siendo solo de caja.
+   */
+  if (parsed.data.tipo === 'ajuste' || parsed.data.tipo === 'devolucion') {
+    await exigirRol(...ROLES_CAJA);
+  } else {
+    await exigirSesion();
+  }
 
   // Daño y pérdida siempre restan; ajuste puede ir en cualquier dirección.
   const cantidad =
