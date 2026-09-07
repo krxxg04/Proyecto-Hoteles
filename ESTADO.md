@@ -1,6 +1,6 @@
 # Estado del proyecto — Hostal Inteligente
 
-> Documento de traspaso. Última actualización: 2026-09-02.
+> Documento de traspaso. Última actualización: 2026-09-07.
 > Contexto de producto: `context.md` · Stack: `ADR-001` · Arquitectura backend: `ADR-002` · Reglas: `CLAUDE.md`
 
 ---
@@ -21,14 +21,23 @@ Y esto de aquí, que es lo que no está escrito en ningún otro sitio:
 - **Lo que no existe se dice.** El mockup rellenaba huecos con datos bonitos («Última
   limpieza: Hoy · 09:40» fijo para cualquier habitación). Aquí no: si no hay reservas,
   pone «Sin reservas». Un dato inventado en la pantalla de recepción es peor que un hueco.
-- **Hay dos cosas escritas y nunca ejecutadas**, y están marcadas como tales: el camino de
-  Claude Haiku (falta la clave) y el de fotos en R2 (falta la cuenta). `GET /api/salud` lo
-  dice. No las des por funcionando.
+- **Queda UNA cosa escrita y nunca ejecutada**: el camino de fotos en R2 (falta la
+  cuenta). `GET /api/salud` lo dice. No la des por funcionando. El LLM sí funciona desde
+  el 2026-09-04: DeepSeek con saldo, probado contra la API real (§5).
+- **Hay DOS bases de datos y conviene no confundirlas.** Local apunta a `hostal-atlas-dev`
+  (hostal `aurora`); lo desplegado en Render y Vercel apunta al proyecto de la demo. La
+  cookie de sesión lleva el ref del proyecto en su propio nombre
+  (`sb-<ref>-auth-token`), que es la forma más rápida de saber contra qué estás. §2 y §14.
 - **Aparece un patrón, y ya cinco veces:** un caso de uso escrito en `application/` **sin
   ruta HTTP y sin pantalla**. Pasó con `guardarTipoCuarto`, con el CRUD de cuartos, con
   `guardarProducto(…, id)`, con `cambiarPin` y con `reiniciarPin`. Los cinco están
   enganchados; **quedan 16 más** (§11 bis). Antes de escribir un caso de uso nuevo,
   comprueba que el que buscas no exista ya sin puerta.
+- **Y aparece su gemelo: un dato que la base guarda y la pantalla no pide.** Pasó con las
+  alertas atendidas (`atendida_por` y `atendida_at` se guardaban desde el primer esquema y
+  la pantalla pedía solo las abiertas) y con la fecha de apertura del turno. Los dos
+  cerrados el 2026-09-07. El que sigue abierto es `historialCierres`: los cierres de caja
+  están en la base y no hay pantalla que los muestre.
 - **El gate NO se corre contra producción.** `prueba:aislamiento` **crea** un segundo
   hostal (`zz-prueba-aislamiento`) con dos usuarios de auth reales y los deja ahí. Para CI
   hace falta un proyecto Supabase de pruebas, separado del de la demo.
@@ -48,6 +57,7 @@ Y en `Backend/package.json`, todos con `--env-file=.env.local` ya puesto:
 | `npm run migrar:estado` | Solo informa: qué hay aplicado, qué falta, qué se alteró |
 | `npm run prueba:aislamiento` | **El gate.** 92 comprobaciones; sale con código 1 si falla |
 | `npm run seed -- --slug aurora` | Los datos del prototipo (`--limpiar` borra y recarga) |
+| `npm run seed -- --slug aurora --rica` | Lo anterior **más** el histórico grande de la demo: 14 días de ventas y consumo, estadías cerradas, reservas, turnos con gastos y sus alertas (§2) |
 | `npm run bootstrap -- ...` | Alta de un hostal nuevo con su primer administrador |
 | `npm run purgar:medios` | Borra las fotos vencidas (`--simular` para ver qué se iría) |
 | `npm run demo:init` | `bootstrap` + `seed` con las variables `DEMO_*`. Lo corre Render en el primer despliegue |
@@ -56,6 +66,19 @@ Y en `Backend/package.json`, todos con `--env-file=.env.local` ya puesto:
 Y antes de dar algo por terminado, en las dos apps: `npx tsc --noEmit` y `npx eslint src/`.
 
 En PowerShell no existe `&&`: usa `;` o dos terminales.
+
+**Para apuntar un script a la demo** hay un `Backend/.env.demo` (fuera de git, como
+`.env.local`). Los comandos de `package.json` llevan `--env-file=.env.local` fijo, así que
+la demo se toca a mano y a propósito:
+
+```bash
+cd Backend
+node --env-file=.env.demo scripts/migrar.mjs        # migraciones de la demo
+node --env-file=.env.demo scripts/demo-init.mjs     # bootstrap + seed de la demo
+```
+
+**Nunca corras `prueba:aislamiento` con `.env.demo`**: crearía en la demo el hostal de
+prueba con dos usuarios de auth reales.
 
 ---
 
@@ -85,7 +108,7 @@ Dos aplicaciones Next.js 16 independientes, funcionando contra una base Supabase
 Hotel/
   Backend/     API + lógica de negocio     · puerto 3000
   Frontend/    interfaz (PWA)              · puerto 3001
-  Database/    los 14 SQL, versionados
+  Database/    los 16 SQL, versionados
   index.html   prototipo, referencia visual y de lógica (no se toca)
 ```
 
@@ -160,9 +183,52 @@ reparten a propósito, y si el primer visitante cambiara el PIN dejaría fuera a
 
 ## 2. Base de datos
 
-Proyecto Supabase `hostal-atlas-dev`, región **`sa-east-1` (São Paulo)** — la más cercana a
-Perú que ofrece Supabase, ~60-80 ms de ida y vuelta desde Lima. **28 tablas · RLS activo en
-las 28 · aislamiento probado (§4).**
+**Dos proyectos Supabase**, los dos en **`sa-east-1` (São Paulo)** — la región más cercana
+a Perú que ofrece Supabase, ~60-80 ms de ida y vuelta desde Lima.
+
+| Proyecto | Ref | Quién lo usa | Qué tiene |
+|---|---|---|---|
+| `hostal-atlas-dev` | `mtlpiocqtjrn…` | `npm run dev` en local · **el gate** | `aurora` con el histórico grande + la basura que deja el gate |
+| `hostal-demo` | `qwaierqigycc…` | Render + Vercel | Solo `Hostal Demo` |
+
+**29 tablas · RLS activo en las 29 · aislamiento probado (§4).** Y las dos bases tienen
+exactamente el mismo esquema: las 16 migraciones aplicadas en las dos.
+
+**Por qué dos y no una.** Técnicamente la demo cabía como un segundo `tenant` de la misma
+base —el sistema es multi-tenant y `seed --limpiar` borra acotado por `tenant_id`, así que
+resembrar la demo no tocaría desarrollo. La razón real es el gate: `prueba:aislamiento`
+**crea** un hostal con dos usuarios de auth reales cada vez que corre, y compartir base
+obligaría a elegir entre correr el gate o tener la demo limpia. Lo secundario: `auth.users`
+es un namespace único por proyecto, así que los visitantes de la demo estarían en la misma
+tabla de auth que el personal de desarrollo.
+
+⚠️ El plan gratuito de Supabase da **2 proyectos activos por organización**, y ya están
+ocupados. El de producción y el de CI (§13) necesitan otra organización o plan pago.
+
+### Las 29 tablas, y cuáles no se usan
+
+Barrido del 2026-09-03, cruzando cada tabla contra el código:
+
+| Cuántas | Cuáles | Estado |
+|---|---|---|
+| 21 | `tenants` `profiles` `tipos_cuarto` `cuartos` `productos` `huespedes` `estadias` `reservas` `movimientos_inventario` `ventas` `turnos` `cierres_caja` `turno_conteos` `gastos` `alertas` `incidencias` `aseo` `inspecciones` `caja_estado` `audit_log` `cuarto_estado_log` | Núcleo operativo, con datos reales |
+| 2 | `caracteristicas` (8 filas) · `bancos` (4) | Catálogos que lee la interfaz |
+| 1 | `_migraciones` | La crea el runner en JavaScript. **RLS activo y cero policies**, o sea deniega a todos salvo `service_role` — correcto |
+| 3 | `acompanantes` · `medios` · `consentimientos` | Escritas por código que existe y nunca se ha ejecutado (R2, §9) |
+| 1 | `tipo_cambio` | La lee `registrar_venta()` para multimoneda; nunca hay tipo de cambio cargado |
+| 1 | `integraciones` | **Muerta.** Su única aparición en todo el SQL es recibir un trigger de `updated_at`. Es la `INTEGR` del prototipo, y esa vista es premium |
+
+**No conviene borrar ninguna.** Una tabla vacía no consume nada medible; quitar
+`tipo_cambio` obliga a editar `registrar_venta()`, que funciona; `integraciones` es el
+hueco de una función premium que `ADR-001` sí planea; y borrar tablas de un esquema
+aplicado significa una migración nueva que hay que correr en las dos bases para no ganar
+nada. Lo útil del barrido no es reducirlas: es saber que **cuatro** esperan código que aún
+no corre y **una** está muerta.
+
+⚠️ Si ves `1 fila` en `integraciones`, `tipo_cambio`, `consentimientos`, `medios`,
+`acompanantes` o `turno_conteos`, **no son datos reales**: son del hostal
+`zz-prueba-aislamiento`, porque el gate siembra una fila en cada una de las 25 tablas con
+`tenant_id` para que «no veo nada del otro hostal» signifique algo.
 
 ### Cómo se crea un proyecto nuevo (demo o producción)
 
@@ -208,10 +274,57 @@ npm run migrar            # aplica lo pendiente
 | 12 | `12_caja_unica_y_gastos.sql` | Una sola caja, `gastos` fijos y justificables, `costo_referencia`, y las alertas conectadas |
 | 13 | `13_turnos_con_caja_unica.sql` | Abrir y cerrar turno contra el saldo único; el conteo de efectivo pasa a ser el saldo |
 | 14 | `14_login_por_hostal.sql` | El login lo resuelve el servidor, acepta el hostal para desambiguar, y el PIN entregado es temporal |
+| 15 | `15_sin_estado_checkout.sql` | **Fuera el estado `checkout`**: la inspección pasa a ser la revisión de salida y es de recepción (§6 quinquies) |
+| 16 | `16_alerta_por_faltantes.sql` | Una inspección con faltantes deja alerta, en un trigger sobre `inspecciones` |
 
 Las cuatro primeras están marcadas como *baseline*: ya estaban aplicadas a mano cuando se adoptó el runner, así que se registraron sin volver a ejecutarlas.
 
 El runner solo lee `NN_*.sql`. (Había un `Supabase.txt` con una copia vieja de `01_schema.sql`; se borró: un archivo que nadie debe ejecutar y que parece ejecutable es un arma cargada.)
+
+### El histórico grande: `seed --rica`
+
+El seed del prototipo es deliberadamente pequeño —9 ventas, todas de «ayer» y «hoy»— y para
+desarrollo eso es correcto: contrasta uno a uno contra `index.html`. Pero deja pantallas
+mudas: las minigráficas de 14 días dibujan con dos días de datos, Reservas sale vacía y
+Caja no tiene un solo gasto que mostrar.
+
+`--rica` añade el histórico de `datos-demo.mjs`. Aplicado a `aurora` el 2026-09-02:
+
+| | |
+|---|---|
+| Ventas | 85 en 14 días, con más movimiento en fin de semana |
+| Entregas a habitaciones | 33 |
+| Estadías cerradas | 21, dos de ellas hoy |
+| Reservas | 7, en sus cuatro estados, una vencida sin resolver a propósito |
+| Turnos cerrados | 3, con 5 gastos (3 fijos + 2 justificables) y sus alertas |
+| Caja | S/ 350 |
+| Huéspedes | 10 |
+| `costo_referencia` | Poblado, que es lo que permite que salte la alarma de sobreprecio |
+
+**Todo sale de un generador con semilla fija**, así que dos personas que siembren la demo
+ven los mismos números. Un histórico distinto en cada corrida hace imposible escribir un
+guion de demo.
+
+Y tres invariantes que se comprueban **antes** de escribir nada, porque cada una se rompió
+al construirlo:
+
+1. **El kardex tiene que cuadrar con la columna de stock.** La carga inicial es
+   `final + vendido + entregado − comprado_en_gastos`; si sale negativa, el script muere
+   con el nombre del producto en vez de dejar un kardex torcido.
+2. **El saldo no puede ser negativo en NINGÚN momento**, no solo al final. La primera
+   versión vendía kits de aseo doce días antes de comprarlos: la suma cuadraba y el
+   recorrido no, que es un histórico imposible. `comprobarRecorrido()` lo simula en orden
+   cronológico.
+3. **Ninguna venta en el futuro.** Restar horas sobre «ahora menos N días» cruzaba la
+   medianoche hacia adelante y sembraba ventas de mañana, que descolocan la tarjeta de «hoy
+   vs ayer» sin que se vea por qué.
+
+**No se siembra `turno_conteos`**: haría falta inventar el stock que había en cada cierre, y
+esos números no atarían con el kardex. Un conteo que no cuadra con el inventario es
+exactamente el registro que miente que el resto del script evita.
+
+Un aviso: hoy en `aurora` **hoy cierra por debajo de ayer**, así que la tarjeta «vs ayer»
+del panel sale en rojo. Es a propósito — forzar que siempre suba sería cocinar el dato.
 
 ### Datos cargados
 
@@ -251,7 +364,7 @@ Dos decisiones al portar, por si chocan con el prototipo:
 | Arquitectura por módulos y capas | `ADR-002` | `actions/` plano ya no cabía en la cabeza |
 | La base de datos **es** el modelo de dominio | `ADR-002` | RLS, precios y atomicidad viven en Postgres |
 | Front en app separada (`Frontend/`) | decisión del cliente | Decisión del cliente; obliga a HTTP en vez de Server Actions |
-| Claude Haiku para la IA | `ADR-001 §2` | No es decisión abierta |
+| ~~Claude Haiku~~ → **DeepSeek `v4-flash`** para la IA | `ADR-003` y `ADR-004` | Coste: entre 2,3× y 7,6× más barato. Haiku nunca se ejecutó, así que no había calidad medida que perder |
 | El origen de cada escritura viaja en una cabecera | `05_origen_y_realtime.sql` | Alternativa: un parámetro en cada función SQL y en cada repositorio. Ver §5 |
 | Realtime va directo del navegador a Supabase | `useEnVivo.ts` | Un socket no se puede reescribir por `next.config`. Ver §7 |
 | Check-in e inspección son **cajones**, no páginas | `CajonCheckin`, `CajonInspeccion` | Es como los abre el mockup. Recepción está mirando otra cosa cuando llega alguien; abrir encima y cerrar deja la pantalla donde estaba |
@@ -337,7 +450,9 @@ no reventaba porque la fila ya existía de corridas anteriores.
 
 ## 5. El asistente con IA
 
-Híbrido, como manda `ADR-001 §3`: **reglas primero (gratis), Claude Haiku solo para lo que no reconocen.**
+Híbrido, como manda `ADR-001 §3`: **reglas primero (gratis), el LLM solo para lo que no
+reconocen.** El proveedor es **DeepSeek `deepseek-v4-flash`**, único, por `ADR-003` y
+`ADR-004` — antes era Claude Haiku, que nunca se llegó a ejecutar por falta de clave.
 
 - 9 acciones: check-in, vender, entregar, comprar, reportar daño, cambiar estado, consultar cuarto, consultar stock, buscar huésped.
 - **Conversación multi-turno**: si falta un dato, lo pregunta.
@@ -381,11 +496,81 @@ El origen viaja en la cabecera HTTP `x-origen`, que PostgREST expone en `request
 
 Verificado de punta a punta: un cambio por el asistente queda como `asistente`, el mismo cambio por la interfaz como `app`, y el seed como `sistema`.
 
+### El proveedor: DeepSeek, y lo que costó averiguar
+
+`ADR-003` explica por qué se cambió y `ADR-004` por qué quedó uno solo. Lo que hay que
+saber para trabajar con él:
+
+**Va por el endpoint en formato Anthropic** que DeepSeek publica
+(`https://api.deepseek.com/anthropic`), así que se reutiliza `@anthropic-ai/sdk` y el
+mismo formato de herramientas. Ese paquete sigue en las dependencias **no** porque quede
+código de Claude, sino porque es el cliente del protocolo que habla DeepSeek. Está
+anotado en la cabecera de `deepseek.ts` para que nadie lo borre creyéndolo huérfano.
+
+**El nombre nativo funciona.** Su documentación solo describe pasar alias de Claude por
+ese endpoint, pero `deepseek-v4-flash` directo responde —comprobado contra la API— y un
+alias es una indirección que ellos pueden cambiar sin avisar.
+
+**Razona por defecto, y sale carísimo.** Devuelve un bloque `thinking` antes de la
+herramienta: medido con la misma frase, **634 tokens de salida contra 70** con el
+razonamiento apagado. Nueve veces más para la misma respuesta. Y con `max_tokens` corto se
+lo come entero y no llega a emitir el `tool_use`, así que el asistente diría «no entendí»
+siempre. Va con `thinking: { type: 'disabled' }`.
+
+**Tres límites de su compatibilidad**, cada uno con consecuencia en el código:
+
+| Límite | Qué obliga |
+|---|---|
+| `tool_choice: {type:'tool', name}` no existe (solo `none`/`auto`/`any`) | La acción a medias se pide **por texto** y el adaptador comprueba en la respuesta que el modelo no se cambió de tema |
+| `cache_control` se ignora | No se pierde nada: su caché es automática. Pero el prefijo estable se sigue mandando primero, porque de eso depende que acierte |
+| `system` como array no está documentado | Se une en un string |
+
+**`temperature: 0` NO lo hace determinista.** Medido: cinco vueltas de la misma frase
+dieron tres respuestas de un tipo y dos de otro. Se deja puesto porque reduce la
+dispersión y no cuesta nada, pero **no** se puede escribir un guion de demo que dependa de
+que una frase fuera de las reglas dé siempre lo mismo. Las que resuelven las reglas sí son
+idénticas siempre.
+
+### Lo que cuesta de verdad
+
+Medido leyendo el `usage` que devuelve la API, no estimado:
+
+```
+llamada 1 (en frío)   in=1897  cache_read=0     out=70
+llamada 2             in=110   cache_read=1792  out=101
+```
+
+La caché acierta: la segunda reutilizó 1 792 tokens del prefijo (las 9 herramientas + el
+catálogo) y solo pagó 110 nuevos.
+
+| | Por llamada | Con $5 de crédito |
+|---|---|---|
+| Hora pico | $0.000187 | ~26 700 llamadas |
+| Valle | $0.000094 | ~53 500 llamadas |
+
+Y lo que más importa: **solo llegan al LLM las frases que las reglas no reconocen**. Todo
+el guion de pruebas —`2 aguas a la 101`, `¿cuánta agua queda?`, `la 203 ya está limpia`—
+cuesta cero. Validar el asistente entero son ~150 llamadas: **quince céntimos**.
+
+El payload son 5 546 caracteres, de los que el 80 % son los esquemas zod de las 9
+herramientas convertidos a JSON Schema.
+
 ### Estado de verificación
 
 ✅ **El motor de reglas está probado**: 16/16 frases y el check-in conversacional completo contra la base real, con cero llamadas al LLM.
 
-❌ **El camino de Haiku nunca se ha ejecutado.** Falta `ANTHROPIC_API_KEY` en `Backend/.env.local`. `GET /api/salud` dice si la clave está puesta.
+✅ **El camino del LLM está ejecutado y probado** desde el 2026-09-04, con clave de pago.
+`GET /api/salud` responde `deepseek:deepseek-v4-flash`. Sin clave dice
+`solo reglas (falta DEEPSEEK_API_KEY)` y el asistente degrada limpio: probado con la clave
+sin saldo, un 402 se traga en el `try/catch` de `continuar()` y sale «No entendí esa».
+
+✅ **Barrido de 30 comprobaciones por la API** (§8 ter). Pasa entero.
+
+⚠️ **Dos límites del diseño que parecen fallos y no lo son.** `reportar_danio` exige un
+producto **del catálogo**, así que «se rompió el espejo del 105» no se puede registrar como
+daño — el asistente lo dice y ofrece mandar el cuarto a mantenimiento. Y hay frases que ni
+las reglas ni el modelo cubren («entraron dos chicos por 3 horas»): responde «no entendí»
+en vez de inventar, que es lo correcto.
 
 ---
 
@@ -399,7 +584,7 @@ Verificado de punta a punta: un cambio por el asistente queda como `asistente`, 
 | Panel · Caja · Alertas | ✅ | ✅ | — |
 | Huéspedes · Reservas | ✅ | ✅ | — |
 | Check-in · Inspección *(cajones)* | ✅ | ✅ | — |
-| Habitaciones | rejilla, 7 estados | rejilla, 7 estados | **su lista, un botón** |
+| Habitaciones | rejilla, 6 estados | rejilla, 6 estados | **su lista, un botón** |
 | Inventario | entregar · comprar · vender · aseo | igual | entregar · aseo |
 | Limpieza · Asistente | ✅ | ✅ | ✅ |
 | Asistente: acciones | 9 | 9 | **5** (§5) |
@@ -414,7 +599,7 @@ añadirla a `PERMITIDAS.administrador` se la quita también al administrador. Pa
 
 ### La vista de piso
 
-La diferencia con la de recepción no es que se vea menos, es que **se decide menos**. Recepción elige entre siete estados porque tiene que poder corregir cualquier cosa; quien limpia con una tablet en la mano no elige: termina un cuarto y pasa al siguiente paso. Un botón de 44 px con el paso que toca — *Empezar a limpiar*, *Terminé de limpiar*, *Marcar como lista* — más *Reportar avería*, que es lo único que se sale del flujo y lo encuentra justo esa persona.
+La diferencia con la de recepción no es que se vea menos, es que **se decide menos**. Recepción elige entre los seis estados porque tiene que poder corregir cualquier cosa; quien limpia con una tablet en la mano no elige: termina un cuarto y pasa al siguiente paso. Un botón de 44 px con el paso que toca — *Empezar a limpiar*, *Terminé de limpiar*, *Marcar como lista* — más *Reportar avería*, que es lo único que se sale del flujo y lo encuentra justo esa persona.
 
 El resto del hostal aparece plegado y solo para mirar.
 
@@ -535,12 +720,25 @@ Las cuatro reglas viven en `registrar_gasto()`, no en TypeScript:
 El gasto **no descuenta el saldo al registrarse**. Igual que las ventas: el saldo lo fija el
 conteo de cierre. Dos sitios que muevan el saldo son dos verdades.
 
-### «Comprar», no «Agregar»
+### «Agregar» en Inventario, «Comprar» en Caja — y por qué el rótulo no cambia nada
 
-Se planteó poner *Agregar* en Inventario (solo stock) y *Comprar* en Caja (dinero y stock).
-Se descartó: **«Agregar» sin dinero es la puerta por la que se tapa un faltante** — el kardex
-dice que entró stock, la caja nunca se movió, y el conteo de cierre cuadra sin que nadie haya
-comprado nada.
+Primero se descartó y luego se pidió otra vez, así que conviene tener claro qué se decidió
+cada vez.
+
+**Lo que sigue descartado** es la versión peligrosa: *Agregar* como una operación que solo
+mueve stock. **«Agregar» sin dinero es la puerta por la que se tapa un faltante** — el
+kardex dice que entró stock, la caja nunca se movió, y el conteo de cierre cuadra sin que
+nadie haya comprado nada. Para meter stock sin dinero ya existe `ajuste`, que pide motivo y
+es de administración.
+
+**Lo que se hizo el 2026-09-03** es solo el rótulo: el botón de la tarjeta de Inventario
+dice **«Agregar»** y el diálogo que abre se titula «Agregar al stock». El comportamiento es
+el mismo de antes — sigue pidiendo *«Cuánto se pagó en total (S/)»* y el medio de pago, y
+avisa «Sale de la caja» — así que el rótulo es la puerta y el diálogo dice la verdad de lo
+que hace.
+
+En Caja sigue diciendo **«Comprar producto»**. Un solo concepto, dos puertas: desde
+Inventario (donde se ve que falta) y desde Caja (donde se ve el dinero).
 
 Así que hay **un solo concepto, «Comprar»**, que siempre mueve dinero y stock juntos, con dos
 puertas: desde Inventario (donde se ve que falta) y desde Caja (donde se ve el dinero). Para
@@ -553,8 +751,35 @@ meter stock sin dinero ya existía `ajuste`, que pide motivo y es de administrac
 - **Inventario**: *Comprar* pide monto y medio de pago, con el precio de referencia como
   marca de agua.
 - **Alertas**: sección **«Requieren tu revisión»** con las alertas del sistema y su botón de
-  *Revisada*.
+  *Revisada*, y al pie **«Ya revisadas»**, plegable.
 - **Productos**: campo de costo de referencia por unidad.
+
+### El historial que se guardaba y no se veía (2026-09-07)
+
+Los datos estaban desde el primer esquema; faltaba la ventana. Se cerraron dos huecos y
+queda uno.
+
+**Los turnos guardan apertura y cierre**, con quién: `abierto_at`, `cerrado_at`,
+`usuario_id` y `cerrado_por` son columnas distintas a propósito, porque puede abrirlo
+recepción y cerrarlo el administrador. Y `cierres_caja` guarda el desglose por medio de
+pago. Pero Caja mostraba **solo la hora** de apertura: «08:21 p. m.», que parece de hoy
+siempre. Un turno de noche cruza la medianoche. Ahora usa `fechaYHora()`.
+
+**Las alertas no se borran nunca.** `atender_alerta()` hace un `update` y guarda
+`atendida_por` y `atendida_at`; nada en el repo las elimina salvo `seed --limpiar`. Pero la
+pantalla pedía solo las abiertas, así que ese registro existía y no había forma de
+consultarlo desde la app. Ahora hay **«Ya revisadas»** al pie —plegable, como
+«Inhabilitados» en Cuartos: es historial, no trabajo pendiente— con quién la revisó y
+cuándo.
+
+Para eso la consulta tuvo que traer `atendida_at` y el nombre, incrustando el perfil por
+`alertas_atendida_por_fkey` y aplanándolo con `uno()`.
+
+⚠️ **La campana sigue pidiendo solo las abiertas**, a propósito. Si contara las atendidas,
+el punto rojo no se apagaría nunca.
+
+**El hueco que queda**: no hay pantalla de historial de turnos y cierres. `historialCierres`
+está escrito sin ruta ni pantalla (§11 bis, §13).
 
 ---
 
@@ -612,6 +837,79 @@ la app a gente que ya la estaba usando.
 admin») y no está. Un PIN de 6 dígitos son un millón de combinaciones; Supabase limita los
 intentos en su endpoint de auth, pero no hay bloqueo por cuenta tras N fallos. Ahora que el
 login lo resuelve el servidor, ese contador se puede añadir sin tocar la base.
+
+---
+
+## 6 quinquies. Los 6 estados de una habitación
+
+Eran siete. `checkout` salió en la migración 15, y con él se arregló una **colisión de
+nombres** que llevaba desde el principio: había dos cosas llamadas «inspección» y
+significaban lo contrario.
+
+- El **estado** `inspeccion` era el control de calidad **después** de limpiar.
+- El **cajón** «Iniciar inspección» era el conteo de toallas y sábanas **al salir** el
+  huésped, y se abría sobre un cuarto en `checkout`.
+
+Lo pidió el hostal al revés de como estaba, y tiene más sentido: lo que importa cuando
+alguien se va es comprobar que no falta nada.
+
+```
+   libre ──check-in──▶ ocupada ──check-out──▶ inspeccion
+                                                  │  «Revisado, a limpiar»   ← recepción
+                                                  ▼
+   mantenimiento ──«Ya está arreglada»──▶      limpieza
+                                                  │  «Terminé de limpiar»    ← piso
+                                                  ▼
+                                                lista ──check-in──▶ ocupada
+```
+
+| En la base | Lo que ves | Color | Quién lo mueve |
+|---|---|---|---|
+| `libre` | Disponible | gris | recepción |
+| `ocupada` | Ocupada | gris | recepción |
+| **`inspeccion`** | **Inspección** | **rojo** | **recepción** |
+| `limpieza` | En limpieza | azul | piso |
+| `lista` | Lista | verde | piso |
+| `mantenimiento` | Mantenimiento | morado | piso |
+
+`inspeccion` **hereda el rojo y el permiso** que tenía `checkout`. Eso es lo que hace que
+el cambio no abra un agujero: `guardarInspeccion` ya exigía administración o recepción, así
+que si `inspeccion` se hubiera quedado como estado de piso, quien limpia podría sacar el
+cuarto de ahí pulsando «terminé» y **saltarse la comprobación de que no falta nada**, que
+es justo lo que el hostal quiere revisar. El gate lo verifica: *«limpieza no puede poner un
+cuarto en "inspeccion"»*.
+
+### El valor `checkout` sigue en el enum, a propósito
+
+Postgres no deja quitar un valor de un enum sin recrear el tipo, y recrearlo obliga a
+reescribir la columna de `cuartos`, la de `cuarto_estado_log` y la firma de dos funciones
+— para borrar una palabra. En su lugar la migración **lo prohíbe** en
+`cambiar_estado_cuarto()` y en la policy `cuartos_upd`. Y hay una razón mejor para no
+borrarlo: **el historial**. Hay filas en `cuarto_estado_log` que dicen `checkout`; si se
+borrara el valor del tipo, ese log dejaría de leerse.
+
+### Dos reglas del asistente cambiaron de SIGNIFICADO, no de nombre
+
+Al mover la inspección al principio del ciclo:
+
+| Frase | Antes | Ahora |
+|---|---|---|
+| `la 203 ya está limpia` | → `inspeccion` | → **`lista`** |
+| `checkout de la 102` | → `checkout` | → **`inspeccion`** |
+
+La primera es la peligrosa: con el flujo nuevo, dejarla como estaba habría empujado el
+cuarto **hacia atrás**.
+
+### Y una inspección con faltantes deja alerta
+
+Migración 16, en un **trigger** sobre `inspecciones` y no en `guardarInspeccion`, por la
+misma razón que el resto de las reglas: desde TypeScript se olvida y por PostgREST se
+esquiva.
+
+Ámbar con uno o dos faltantes, **rojo con tres o más** — una toalla puede ser un descuido,
+tres cosas al salir alguien es otra conversación. El detalle lista cada artículo y la nota
+de la inspección. Antes se contaban los faltantes, se devolvían a la pantalla y ahí morían,
+mientras `registrar_gasto` sí alertaba por cualquier gasto raro.
 
 ---
 
@@ -787,6 +1085,82 @@ Tiene que responder que ese estado lo cambia recepción.
 
 ---
 
+## 8 ter. Tercera ronda: el asistente contra el LLM de verdad (2026-09-04/07)
+
+La primera vez que el camino del LLM se ejecuta. Salieron **ocho fallos reales**, y siete
+los encontró probar por la API o el navegador, no leer el código.
+
+### Los ocho, y qué eran
+
+| Qué se vio | Qué era |
+|---|---|
+| «un agua con yape a la 302» → **«Cobrar 302 Agua 500 ml»** | El más grave. La 302 no existe, así que el número no se reconocía como cuarto, se quedaba en el texto y `detectarCantidad` lo tomaba como la cantidad. Confirmar eso vendía 302 aguas |
+| Check-in a un cuarto ocupado fallaba **al confirmar** | Después de preguntar nombre y documento. Cuatro preguntas y un DNI recogido para nada — lo mismo que ya se había corregido para el corte por rol |
+| «se rompió el espejo del 105» → **bucle infinito** | «espejo» no está en el catálogo, el contexto no llevaba contador de intentos, y la misma respuesta producía el mismo faltante para siempre |
+| El nombre del huésped se guardaba como la frase entera | `extraerCampo('nombre')` devolvía el mensaje tal cual si medía ≥2 caracteres; al no ser nulo, el asistente daba el campo por resuelto y no llamaba al LLM, que sí habría separado nombre y DNI |
+| «dos noches» perdía las noches | La regla de check-in buscaba `/(\d+)\s*noche/`, solo dígitos. El mapa `NUMEROS` ya existía y nadie lo usaba ahí |
+| «se queda dos noches en la 205» → **`personas: 205`** | Al quitar la duración quedaba el número de cuarto y se contaba como gente. `sinCuarto` ya existía en la misma función y el check-in no la usaba |
+| Pérdida y daño se registraban igual | El enum `tipo_movimiento` distingue `danio` y `perdida` desde el primer esquema; el asistente mandaba siempre `danio`. El stock bajaba bien y el kardex mentía |
+| Limpieza podía proponer poner un cuarto en «ocupada» | `puedeAccion` mira la **acción** (limpieza sí puede cambiar estados) pero la restricción es por **estado**, y solo vivía en SQL |
+
+Los cuatro primeros los reportó una persona usando la app. Los cuatro últimos salieron de
+escribir pruebas con lo esperado declarado, que es lo que convierte un resultado en un
+veredicto y no en una lista que hay que leer con cuidado.
+
+### El patrón que los une
+
+Seis de los ocho son la misma cosa: **el asistente proponía algo que la base iba a
+rechazar**. La verdad seguía estando en SQL —y sigue— pero llegar hasta el error rojo
+costaba una conversación entera, y en el caso del check-in costaba además el DNI de una
+persona.
+
+Por eso ahora hay una comprobación de coherencia en `interpretar()`, **antes** de seguir
+preguntando: estado del cuarto, aforo, y el estado según el rol. No duplica las reglas, las
+repite donde sirven para no molestar a nadie. Si alguien salta el asistente y va por la
+API, la base lo rechaza igual.
+
+### El barrido: 30 comprobaciones
+
+`GET`/`POST` contra la API como lo hace el navegador, con lo esperado declarado en cada
+caso:
+
+| Bloque | Qué cubre | |
+|---|---|---|
+| A | Las 9 acciones se reconocen | 9/9 |
+| B | Las consultas responden con el dato, no «Hecho» | 3/3 |
+| C | Coherencia: cuarto ocupado, en mantenimiento, en limpieza, aforo, habitación inexistente, insumo | 7/7 |
+| D | Nada de bucles: sale del atasco en ≤3 vueltas | 2/2 |
+| E | El check-in conversacional llega a tarjeta completa | 1/1 |
+| F | El rol corta antes de pedir nombre y documento | 4/4 |
+| G | Daño vs pérdida | 3/3 |
+| H | La tarjeta nunca lleva monto | 1/1 |
+
+**Una advertencia sobre el arnés**: la primera versión dio 6 falsos negativos, y los seis
+eran míos. Tres cosas que hay que saber para no repetirlos:
+
+- **Una pregunta por un campo que falta ES la acción correcta en marcha**, no un fallo. Hay
+  que mirar `contexto.accion`, no solo `tarjeta.accion`.
+- **El texto de las consultas lo redacta el FRONTEND** (`redactar()` en
+  `VistaAsistente.tsx`), no el backend. El backend devuelve datos estructurados. Juzgar la
+  respuesta del backend es juzgar la capa equivocada.
+- **`cancelar` también lo resuelve el navegador**, no la API. Contra la API sola devuelve
+  «no entendí», y eso es correcto.
+
+### Lo que solo se puede ver en el navegador
+
+Recorrido por una persona, con los tres roles. Todo pasó:
+
+- La insignia distingue **«Propuesta»** (reglas, coste 0) de **«Generado por IA»**. Es la
+  forma más rápida de ver el motor híbrido funcionando sin abrir un log.
+- Confirmar una venta baja el stock en Inventario y sube el recaudado en Caja: las tres
+  pantallas cuentan la misma historia.
+- Con la sesión de limpieza no hay chips de check-in, y «la 301 a ocupada» responde a quién
+  le toca.
+- `cancelar` a mitad de una conversación la cierra.
+- Realtime entre dos pestañas.
+
+---
+
 ## 9. Fotos en Cloudflare R2
 
 `ADR-001 §3` deja claro que **las fotos son de todos los planes** (solo el video es premium), así que entran en el plan básico y las cubre el gate #3.
@@ -828,12 +1202,12 @@ Las 21 documentables están en `openapi.ts`, sin referencias rotas (`openapi` no
 | Next.js App Router + TS + Tailwind, PWA | ✅ |
 | Supabase Postgres + RLS por `tenant_id` | ✅ 28/28 |
 | Cloudflare R2, buckets privados + URL firmada | ⚠️ escrito, **nunca ejecutado** (sin cuenta) |
-| Claude Haiku híbrido, server-side, tool-use | ⚠️ escrito, **nunca ejecutado** (sin clave) |
+| ~~Claude Haiku~~ → **DeepSeek `v4-flash`** híbrido, server-side, tool-use | ✅ **ejecutado y probado** (2026-09-04). Cambiado en `ADR-003`; `ADR-004` lo dejó como único proveedor |
 | Auth DNI + PIN, correo derivado del DNI | ✅ `email_de_dni()` → `<dni>@<slug>.hostal.local` |
 | **MFA para admin** | ❌ **No está.** Lo pide `§2` y otra vez el checklist `§4` |
 | **Web Speech API (voz)** | ❌ No hay entrada de voz |
 | Realtime de estado de cuartos | ✅ |
-| Hosting Cloudflare (alt. Vercel) | ⚠️ se fue a **Render + Vercel** (§15). **Falta un ADR-003**: `CLAUDE.md` no deja editar un ADR aceptado |
+| Hosting Cloudflare (alt. Vercel) | ⚠️ se fue a **Render + Vercel**, desplegado y funcionando (§14). **Sigue faltando su ADR** — y ahora sería el **005**, porque el 003 y el 004 se ocuparon con el proveedor de LLM |
 | **Sentry** | ❌ No instalado |
 | Pagos (Culqi/Izipay) · SUNAT (Nubefact) | ❌ Fuera del MVP, el ADR los marca «transversal» |
 
@@ -876,7 +1250,7 @@ fuente correcta**; lo desactualizado es ese párrafo de `context.md`.
 | Tarifas del check-in desde el tarifario (decisión 2026-08-06) | ✅ |
 | Motor de inventario con auditoría | ✅ |
 | Backend + persistencia + auth | ✅ |
-| IA real | ⚠️ reglas sí, Haiku sin ejecutar |
+| IA real | ✅ reglas + **DeepSeek ejecutado y probado** (§5, §8 ter) |
 | **Onboarding de 30 s** · **segundo plan Premium** · pagos reales | ❌ pendientes |
 | Reportes/analytics | ❌ largo plazo; hay 5 casos de uso escritos sin pantalla (§11 bis) |
 
@@ -913,7 +1287,7 @@ arriba después de la demo y dejar los demás para cuando exista la vista de Rep
 
 | Pedido | Estado |
 |---|---|
-| Esquema Postgres completo | ✅ 28 tablas |
+| Esquema Postgres completo | ✅ 29 tablas (§2) |
 | RLS por `tenant_id` en TODAS + políticas | ✅ 28/28 |
 | **Probar aislamiento cross-tenant** | ✅ 92 comprobaciones, §4 |
 | Supabase Auth DNI+PIN, 4 roles | ✅ |
@@ -940,7 +1314,7 @@ arriba después de la demo y dejar los demás para cuando exista la vista de Rep
 
 | Pedido | Estado |
 |---|---|
-| Motor híbrido reglas + Haiku, tool-use → JSON | ✅ |
+| Motor híbrido reglas + LLM, tool-use → JSON | ✅ con DeepSeek `v4-flash` |
 | Prompt caching | ✅ en el prefijo del catálogo |
 | Confirmación humana antes de escribir | ✅ |
 | **Registrar en auditoría** | ✅ `origen`, §5 |
@@ -960,7 +1334,10 @@ arriba después de la demo y dejar los demás para cuando exista la vista de Rep
 - **Git Bash en Windows corrompe los acentos** al pasar JSON inline con `curl -d`. Usar `--data-binary @archivo` o `fetch` de Node.
 - **Un `.single()` sobre `profiles` sin filtrar por id revienta.** El RLS deja ver a todo el personal del hostal, así que con más de una persona devuelve varias filas y `.single()` falla — silenciosamente si el llamador tiene un `?? false`. Pasó con `pin_temporal`.
 - **`bootstrap` acepta banderas sin valor solo si están en la lista `BANDERAS`.** El parser lanza «Falta el valor de --x» para cualquier otra, y eso es a propósito: sin la lista, un `--dni --nombre X` pondría `dni = true` y colaría la validación de obligatorios.
-- **Nada se ha commiteado todavía**: `Backend/`, `Frontend/`, `Database/` y `ADR-002` están sin seguimiento.
+- **Todo está commiteado y empujado** a `github.com/krxxg04/Proyecto-Hoteles`, rama `main`.
+  Dos cosas al respecto: `CLAUDE.md` dice «no subir a remotos personales; este repo es de
+  la empresa», y ese remoto parece personal — está sin resolver. Y `Credentials.md` y los
+  `.env*` están en `.gitignore` (comprobado): las claves no han salido en ningún commit.
 - **La UI ya se validó en Chrome**, módulo por módulo y con los tres roles (§8). Desde este entorno no hay navegador: lo que se verifica aquí es el HTML servido, el CSS generado y los redirects. Los píxeles y el Realtime entre pestañas los mira una persona.
 - **El keep-alive tiene que tocar la base, no solo el servicio.** Render duerme un servicio gratuito a los ~15 min, pero un proyecto Supabase gratuito **se pausa a los 7 días sin actividad**. `/api/salud` solo miraba variables de entorno, así que el ping dejaba el backend caliente y la base dormida. Ahora `?db=1` añade una consulta mínima, y el script sale con código 1 si Postgres no responde. Sin el parámetro no toca la base a propósito: el `healthCheckPath` de Render pega ahí seguido y no debe reiniciar un servicio sano por un hipo de Supabase.
 - **Los scripts de `Database/` se aplican con el runner, nunca a mano.** Editar una migración ya aplicada hace que `npm run migrar` se plante, que es lo que se quiere. Existe `--forzar` para reaplicarla; se usó **una vez**, sobre la 08, minutos después de crearla y con esta base como única que la tenía. Si ya está en otra máquina, la respuesta es una migración nueva, no `--forzar`.
@@ -972,6 +1349,27 @@ arriba después de la demo y dejar los demás para cuando exista la vista de Rep
 - **En UPDATE y DELETE, el RLS que bloquea no lanza error**: simplemente no afecta ninguna fila. Para comprobar que algo quedó protegido hay que **volver a leer la fila** con `service_role`; mirar `error` da un falso verde. Es lo que escondía los dos agujeros de §4.
 - **Un `<button>` sin `type` dentro de un `<form>` es `submit`.** Lo vigila `react/button-has-type` en el eslint del front, activado a propósito: es un fallo que no se ve leyendo el código y que en Inventario cobraba una venta al elegir el medio de pago.
 - **`toLocaleString` rompe la hidratación** y, peor, formatea en la zona del servidor. Todo el formato de fechas pasa por `shared/ui/fechas.ts`, que fija `America/Lima` y arma el texto a mano. No volver a llamar a `toLocale*` en componentes.
+- **En una migración NO se escribe `begin`/`commit`.** El runner ya envuelve cada archivo
+  en su propia transacción (`migrar.mjs`), así que un `commit` dentro cierra **la suya**
+  antes de tiempo y le quita el rollback. Ninguna de las 16 los lleva.
+- **Un `case` con dos literales se tipa como `text`.** En un trigger que escribe en una
+  columna enum hay que castear: `(case when … then 'danger' else 'warning' end)::public.severidad_alerta`.
+  Sin el cast, `column "severidad" is of type severidad_alerta but expression is of type text`.
+  Lo cazó una prueba, no el `migrar`.
+- **`--forzar` se ha usado dos veces**, las dos minutos después de crear la migración y con
+  estas bases como únicas que la tenían: la 08 y la 16. Si ya está en otra máquina, la
+  respuesta es una migración nueva.
+- **Los precios y los nombres de modelo de un proveedor se consultan, no se recuerdan.**
+  El modelo que buscábamos ya no se llamaba `deepseek-chat` sino `deepseek-v4-flash`, y la
+  estimación de coste que hice de memoria fue cinco veces pesimista. Leer su página de
+  precios cuesta un minuto.
+- **El cookie jar de curl se corrompe con las cookies de Supabase.** Son muy largas y van
+  partidas en `.0` y `.1`, y además marcadas `#HttpOnly_`. Para probar la API desde un
+  script, haz el login con `fetch` y arma la cabecera con `response.headers.getSetCookie()`.
+- **Al escribir regex con un script, cuidado con los escapes.** Un `\b` puede acabar como
+  un byte de retroceso (0x08) **dentro** de la expresión, y entonces solo fallan algunas
+  alternativas: `perdieron` funcionaba y `se perdio` no. `cat -v` lo enseña; `grep -rlP
+  '[\x00-\x08\x0b\x0c\x0e-\x1f]'` lo busca en todo el repo.
 - **`(sesion)` es un route group**, no un segmento de URL: los paréntesis son lo que hace que no aparezca. `(sesion)/habitaciones` se sirve en `/habitaciones`. Está para que todo lo de dentro comparta el chasis y la exigencia de sesión, y `/login` quede fuera. Quitarle los paréntesis movería cada ruta a `/sesion/...`.
 
 ---
@@ -980,29 +1378,57 @@ arriba después de la demo y dejar los demás para cuando exista la vista de Rep
 
 Por orden de riesgo, no de esfuerzo.
 
-1. **Commitear.** Nada de esto está en git y ya es mucho trabajo sin respaldo. Es lo único
-   de la lista que no se puede recuperar.
-2. **Un ADR-003 para el hosting.** `ADR-001` dice Cloudflare y se fue a Render + Vercel.
-   `CLAUDE.md` es explícito: un ADR aceptado no se edita, se abre uno nuevo.
-3. **Programar el keep-alive** en un pinger externo cada ~10 min (§14). Sin eso la demo se
-   cae sola a los 7 días y no por un fallo del código.
-4. **`.env.example` en las dos apps.** Hoy montar esto en otra máquina es leer el código
+1. **El proyecto Supabase de producción.** Es lo primero de verdad, y no se resuelve
+   limpiando `hostal-atlas-dev`: borrar los datos **no borra los usuarios de auth**
+   (`profiles.tenant_id` cascadea, `auth.users` no), así que quedarían Ana Torres, Luis,
+   Marta y los dos que crea el gate como credenciales vivas en la base del cliente. Y
+   compartir base con desarrollo obliga a dejar de correr el gate. Receta: proyecto nuevo,
+   `migrar`, `bootstrap` por cliente **sin** `--pin-definitivo`, y **nunca** `seed`,
+   `demo:init` ni `prueba:aislamiento`. Ojo: **una sola base para todos los clientes** —
+   para eso está el RLS por `tenant_id`; un cliente nuevo es una fila en `tenants`.
+2. **Su propio servicio en Render**, sin el `initialDeployHook: npm run demo:init` del
+   `render.yaml`. Si se reutiliza el blueprint de la demo, el primer despliegue crea
+   «Hostal Demo» con PIN 123456 en la base del cliente.
+3. **El ADR del hosting**, que ahora sería el **005**. `ADR-001` dice Cloudflare y se fue a
+   Render + Vercel; `CLAUDE.md` no deja editar un ADR aceptado.
+4. **El fallo del conteo de gastos.** `buscarGastos(turnoId)` cae en la consulta **sin
+   filtrar** cuando no hay turno abierto, porque el `null` significa dos cosas: «sin
+   filtro» y «no hay turno». La tarjeta de Caja dice «S/ 0.00 · N gastos» contando el
+   histórico completo. Una línea.
+5. **Borrar el `package-lock.json` de la raíz.** 84 bytes, sin `package.json` al lado, y
+   hace que Next elija la raíz del repo como workspace root en vez de la carpeta de cada
+   app. En local solo molesta; en el *output file tracing* de un build puede meter o dejar
+   fuera archivos.
+6. **`.env.example` en las dos apps.** Hoy montar esto en otra máquina es leer el código
    para adivinar qué variables hacen falta.
-5. **CI que corra el gate** contra un **tercer** proyecto Supabase de pruebas — nunca contra
+7. **CI que corra el gate** contra un **cuarto** proyecto Supabase de pruebas — nunca contra
    la demo ni contra producción, porque crea un hostal con usuarios reales.
-6. **MFA para administradores.** `ADR-001` lo pide dos veces y no está. Ahora que el login
+8. **MFA para administradores.** `ADR-001` lo pide dos veces y no está. Ahora que el login
    lo resuelve el servidor, también cabe ahí un contador de intentos fallidos.
-7. **Sentry.** Sin observabilidad, en producción te enteras de los fallos por WhatsApp del
+9. **Sentry.** Sin observabilidad, en producción te enteras de los fallos por WhatsApp del
    cliente.
-8. **Cuenta de Cloudflare R2 y crédito en Anthropic.** No es desarrollo: son dos cuentas, y
-   cierran los gates #3 y #4 y el camino de Haiku. Las fotos son del **plan básico** según
-   `ADR-001 §3`, así que hoy falta una función prometida.
-9. **La entrada de voz** (Web Speech API). Es lo único de lo que falta del plan básico que
+10. **Cuenta de Cloudflare R2.** No es desarrollo, es una cuenta, y cierra los gates #3
+    y #4. Las fotos son del **plan básico** según `ADR-001 §3`, así que hoy falta una
+    función prometida. (El crédito del LLM ya está: DeepSeek con saldo desde el
+    2026-09-04.)
+11. **El riesgo residual de datos personales del `ADR-003`.** El mensaje que teclea
+    recepción se manda tal cual al proveedor. Si alguien escribe «llegó Carlos Mendoza con
+    DNI 71234567», eso viaja a China. `indicaciones.ts` ya redacta los campos ya
+    recogidos (`nombre`, `num_doc`, `telefono` → `(ya registrado)`), pero el texto libre
+    no. **El gate #4 sigue abierto por esto**, y las tres salidas están en el ADR.
+12. **La pantalla de historial de turnos y cierres.** `historialCierres` existe en
+    `application/` sin ruta ni pantalla (§11 bis). Los turnos guardan `abierto_at`,
+    `cerrado_at`, quién abrió y quién cerró, y `cierres_caja` el desglose por medio de
+    pago — todo desde el primer esquema, y desde la app no se llega.
+13. **La entrada de voz** (Web Speech API). Es lo único de lo que falta del plan básico que
    depende solo de nosotros: el reconocimiento lo hace el navegador, no hay que hostear nada.
-10. **El proceso de notificación de brechas** que pide `ADR-001 §4`. Es un documento, no
+14. **El proceso de notificación de brechas** que pide `ADR-001 §4`. Es un documento, no
     código, y sin él el checklist de Ley 29733 no está cerrado.
-11. Cuando toque decidirlo: **ADR-003 para el proveedor de OCR** (`ADR-001 §8` lo dejó
-    abierto). Ojo: si el ADR del hosting se numera 003, este pasa a 004.
+15. Cuando toque decidirlo: **un ADR para el proveedor de OCR** (`ADR-001 §8` lo dejó
+    abierto). Los números 003 y 004 ya están usados por el proveedor de LLM, y el 005
+    queda reservado para el del hosting; este sería el 006. Y un candidato que ya tenemos
+    contratado: `deepseek-v4-flash-vision-exp` cuesta lo mismo que el modelo que usamos y
+    lee imágenes.
 
 ### Qué falta del plan básico, concretamente
 
@@ -1012,7 +1438,7 @@ Lo que no está cerrado es el plan básico *tal como está documentado*:
 | | Falta | Es trabajo de |
 |---|---|---|
 | **Fotos** (`ADR-001 §3`: «todos los planes») | Cuenta de R2 y 4 variables | Media hora de configuración |
-| **Haiku** | Crédito en Anthropic y 1 variable | Céntimos |
+| ~~Haiku~~ **DeepSeek** | ✅ **hecho**: clave con saldo, probado. ~$0.0002 por llamada | — |
 | **Voz** | El código | Poco: Web Speech es del navegador |
 
 Sin las dos primeras, la demo va sin fotos y con el asistente **solo por reglas** — que
@@ -1020,10 +1446,62 @@ cubre las 9 acciones y degrada bien, pero responde «no entendí» a lo que sale
 
 ## 14. Despliegue — Render (backend) + Vercel (frontend)
 
-`ADR-001` decía Cloudflare. Se fue a Render + Vercel, y **eso pide un ADR-003**: `CLAUDE.md`
-no permite editar un ADR aceptado.
+**Desplegado y funcionando desde el 2026-09-03.**
 
-### Lo que ya está montado
+| | URL | Plan |
+|---|---|---|
+| Backend | `https://hotel-demo-backend-alj8.onrender.com` | Render **free**, región **Virginia** |
+| Frontend | `https://proyecto-hoteles-eight.vercel.app` | Vercel **Hobby**, región us-east |
+| Base | `hostal-demo` (`qwaierqigycc…`) | Supabase free, `sa-east-1` |
+
+Credenciales de la demo (los tres PIN son definitivos, se reparten a propósito):
+
+| DNI | PIN | Rol |
+|---|---|---|
+| `40123456` | `123456` | administrador |
+| `41567890` | `112200` | recepción |
+| `42876543` | `258000` | limpieza |
+
+### Lo que se verificó al desplegar
+
+- `GET /api/salud?db=1` → `"base":{"ok":true,"ms":240}`. La primera consulta en frío tarda
+  ~1 000 ms; las siguientes ~240.
+- **La cookie de sesión cruza el proxy** — era lo que §14 marcaba como «lo primero que hay
+  que probar» y estaba sin verificar. Login por el dominio de Vercel devuelve 200 y las dos
+  cookies `sb-<ref>-auth-token` quedan atribuidas a `vercel.app`. Leer datos con esa
+  sesión: 9 habitaciones.
+- **El Realtime del bundle apunta a la base correcta**: el chunk servido por Vercel
+  contiene el ref del proyecto de la demo. Si `NEXT_PUBLIC_SUPABASE_URL` no hubiera estado
+  antes del primer build, el «en vivo» estaría muerto sin decirlo.
+- **No hace falta CORS ni poner la URL de Vercel en Render.** El rewrite de
+  `next.config.ts` es un proxy del lado del servidor: el navegador nunca ve el dominio de
+  Render, así que no hay petición cruzada que autorizar. Y por eso mismo funciona la
+  cookie: si el navegador hablara directo con Render sería cookie de terceros y
+  `SameSite=lax` la bloquearía.
+
+### El plan gratuito de Render obligó a un cambio
+
+Render free **no corre `preDeployCommand` ni da shell**, así que las migraciones y la carga
+inicial **no se ejecutan allí**: se corrieron una vez desde una máquina con
+`--env-file=.env.demo`. `render.yaml` quedó con `plan: free`, sin `preDeployCommand` y sin
+`initialDeployHook`, y con las **3** variables que el servidor necesita en ejecución —
+`DATABASE_URL` es del runner de migraciones, no del servidor.
+
+También lleva `region: virginia`: Render no tiene región en Sudamérica y Supabase está en
+`sa-east-1`, así que Virginia es la más cercana. **No se puede cambiar sin recrear el
+servicio.**
+
+### El keep-alive ya está programado
+
+`.github/workflows/mantener-render-activo.yml`, cada 10 minutos, corriendo
+`npm run mantener-render-activo` con el secret `RENDER_BACKEND_URL`. Pega a
+`/api/salud?db=1` y **sale con código 1 si Postgres no responde**.
+
+Dos avisos: GitHub **desactiva los workflows programados tras 60 días sin actividad en el
+repo**, y si el repo es privado un cron cada 10 minutos se come casi entera la cuota de
+2 000 minutos/mes. Para una demo larga, cron-job.org como respaldo.
+
+### Lo que ya estaba montado
 
 `render.yaml` en la raíz. Render hace, por este orden:
 
