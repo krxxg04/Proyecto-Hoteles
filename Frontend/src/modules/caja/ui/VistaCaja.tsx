@@ -9,7 +9,7 @@ import { abrirTurno, cerrarTurno, conteoEsperado, registrarGasto } from '../infr
 import { ETIQUETA_MEDIO, MEDIOS_PAGO, type MedioPago } from '@/shared/dominio/tipos';
 import { Boton, Campo, Card, Chip, ErrorCaja, Pildora, Vacio, soles } from '@/shared/ui/primitivos';
 import { EncabezadoSeccion } from '@/shared/ui/tabla';
-import { fechaYHora, hora } from '@/shared/ui/fechas';
+import { fechaYHora } from '@/shared/ui/fechas';
 
 /**
  * Caja y turno. El cierre exige contar el inventario y justificar cada descuadre:
@@ -144,9 +144,17 @@ export function VistaCaja({
               <strong className="font-medium">{caja.usuario ?? '—'}</strong>
             </div>
             <div>
+              {/*
+                Con fecha, no solo la hora.
+
+                Decía «08:21 p. m.» y parecía de hoy siempre. Un turno de noche cruza la
+                medianoche, y mirar la caja al día siguiente con solo la hora delante es
+                justo cuando el dato engaña. La base guarda `abierto_at` completo desde el
+                principio; lo que faltaba era enseñarlo.
+              */}
               <span className="text-tx-sec">Desde </span>
               <strong className="font-medium tabular-nums">
-                {hora(caja.turno.abierto_at)}
+                {fechaYHora(caja.turno.abierto_at)}
               </strong>
             </div>
             <div>

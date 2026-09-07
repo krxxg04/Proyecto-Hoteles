@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { uno } from '@/shared/supabase/embebido';
 import { revalidatePath } from 'next/cache';
 import { exigirRol, exigirSesion, ROLES_CAJA } from '@/shared/sesion';
 import { exito, fallo, traducirError, type Resultado } from '@/shared/resultado';
@@ -69,7 +70,18 @@ export async function listarAlertas(soloAbiertas = true): Promise<Resultado<Aler
 
   const { data, error } = await repo.buscarAlertas(soloAbiertas);
   if (error) return fallo(traducirError(error));
-  return exito((data ?? []) as Alerta[]);
+
+  /**
+   * El perfil viene incrustado y Supabase lo tipa como arreglo aunque sea 1:1 — para eso
+   * está `uno()`. Se aplana aquí para que la pantalla reciba un nombre y no una relación.
+   */
+  const filas = (data ?? []) as Array<Record<string, unknown>>;
+  return exito(
+    filas.map(({ profiles, ...a }) => ({
+      ...a,
+      atendida_por_nombre: uno(profiles as { nombre: string } | null)?.nombre ?? null,
+    })) as Alerta[]
+  );
 }
 
 /** «Atendida» significa que una persona la miró y decidió, no que se resolviera sola. */

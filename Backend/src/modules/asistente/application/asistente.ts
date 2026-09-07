@@ -1,9 +1,10 @@
 'use server';
 
-import { exigirSesion } from '@/shared/sesion';
+import { exigirSesion, ROLES_CAJA } from '@/shared/sesion';
 import { conOrigen } from '@/shared/origen';
 import { exito, fallo, type Resultado } from '@/shared/resultado';
 import { ETIQUETA_ESTADO, type EstadoCuarto } from '@/modules/cuartos/domain/tipos';
+import type { Rol } from '@/shared/dominio/rol';
 import { normalizar, interpretarConReglas, type Intencion } from '../domain/reglas';
 import { extraerCampo } from '../domain/campos';
 import {
@@ -103,7 +104,7 @@ export async function interpretar(
    * el corte por rol (§5). La base sigue validando al ejecutar; esto es lo que evita
    * llegar hasta allí.
    */
-  const incoherencia = incoherenciaDe(paso.intencion, catalogo);
+  const incoherencia = incoherenciaDe(paso.intencion, catalogo, sesion.rol);
   if (incoherencia) {
     return exito({ tipo: 'sin_entender', mensaje: incoherencia, sugerencias });
   }
@@ -157,6 +158,9 @@ export async function interpretar(
 /** Los únicos estados desde los que se puede hacer un check-in (`sugerir_cuarto`). */
 const ADMITEN_CHECKIN: EstadoCuarto[] = ['lista', 'libre'];
 
+/** Los que solo mueve recepcion, igual que en `cambiar_estado_cuarto()` de la 15. */
+const SOLO_RECEPCION: EstadoCuarto[] = ['libre', 'ocupada', 'inspeccion'];
+
 /**
  * Lo que la base va a rechazar y aquí se puede saber ya.
  *
@@ -166,8 +170,21 @@ const ADMITEN_CHECKIN: EstadoCuarto[] = ['lista', 'libre'];
  *
  * Devuelve `null` cuando no hay nada que objetar, y un mensaje cuando sí.
  */
-function incoherenciaDe(intencion: Intencion, catalogo: Catalogo): string | null {
+function incoherenciaDe(intencion: Intencion, catalogo: Catalogo, rol: Rol): string | null {
   const p = intencion.parametros;
+
+  /**
+   * Estados que solo mueve recepcion (migracion 15). `puedeAccion` no basta: limpieza
+   * SI puede cambiar estados —es su trabajo— pero no a estos tres. La restriccion es
+   * por estado, no por accion, y vivia solo en SQL: el asistente le proponia a limpieza
+   * "poner la 301 en ocupada" y la base lo rechazaba al confirmar.
+   */
+  if (intencion.accion === 'cambiar_estado_cuarto' && !ROLES_CAJA.includes(rol)) {
+    const estado = p.estado as EstadoCuarto | undefined;
+    if (estado && SOLO_RECEPCION.includes(estado)) {
+      return `El estado "${ETIQUETA_ESTADO[estado]}" lo cambia recepcion: va con el check-in y la revision de salida. Tu puedes mover el cuarto a limpieza, lista o mantenimiento.`;
+    }
+  }
 
   if (intencion.accion !== 'registrar_checkin') return null;
 

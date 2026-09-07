@@ -85,20 +85,25 @@ function AlertasDelSistema({
   onAtender: (id: string) => void;
   ocupado: boolean;
 }) {
+  const abiertas = alertas.filter((a) => !a.atendida);
+  const revisadas = alertas.filter((a) => a.atendida);
+
   if (alertas.length === 0) return null;
 
   return (
+    <>
+    {abiertas.length > 0 && (
     <section>
       <EncabezadoSeccion
         titulo="Requieren tu revisión"
         subtitulo={
-          alertas.length === 1
+          abiertas.length === 1
             ? '1 movimiento se salió de lo normal'
-            : `${alertas.length} movimientos se salieron de lo normal`
+            : `${abiertas.length} movimientos se salieron de lo normal`
         }
       />
       <div className="flex flex-col gap-2">
-        {alertas.map((a) => (
+        {abiertas.map((a) => (
           <Card key={a.id}>
             <div className="flex items-start gap-3">
               <ShieldAlert
@@ -128,6 +133,55 @@ function AlertasDelSistema({
         ))}
       </div>
     </section>
+    )}
+
+    {/*
+      Ya revisadas.
+      ------------------------------------------------------------------------
+      Atender una alerta no la borra: `atender_alerta()` hace un UPDATE y guarda
+      `atendida_por` y `atendida_at`. Hasta ahora ese registro existía en la base y no
+      había forma de consultarlo desde la aplicación — la pantalla pedía solo las
+      abiertas. Aquí se ve, con quién la miró y cuándo, que es lo que convierte «se
+      resolvió» en algo que se puede auditar.
+
+      Va al pie y plegable, igual que «Inhabilitados» en Cuartos: es historial, no
+      trabajo pendiente, y no debe competir por la atención con lo que sí hay que hacer.
+    */}
+    {revisadas.length > 0 && (
+      <details className="mt-6">
+        <summary className="cursor-pointer text-[13px] font-medium text-tx-muted hover:text-tx-sec">
+          Ya revisadas ({revisadas.length})
+        </summary>
+        <div className="mt-3 flex flex-col gap-2">
+          {revisadas.map((a) => (
+            <Card key={a.id}>
+              <div className="flex items-start gap-3 opacity-70">
+                <Check className="mt-0.5 size-[18px] shrink-0" style={{ color: '#22C55E' }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[14px] font-semibold">{a.titulo}</p>
+                    <Chip tono={TONO_SEVERIDAD[a.severidad]}>
+                      {a.origen === 'caja' ? 'caja' : a.origen ?? 'sistema'}
+                    </Chip>
+                  </div>
+                  {a.detalle && (
+                    <p className="mt-1.5 rounded-md bg-bg-ter px-3 py-2 text-[12.5px] text-tx-sec">
+                      {a.detalle}
+                    </p>
+                  )}
+                  <p className="mt-1.5 text-[11.5px] text-tx-muted">
+                    Saltó el {fechaYHora(a.created_at)}
+                    {a.atendida_at ? ` · revisada el ${fechaYHora(a.atendida_at)}` : ''}
+                    {a.atendida_por_nombre ? ` por ${a.atendida_por_nombre}` : ''}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </details>
+    )}
+    </>
   );
 }
 

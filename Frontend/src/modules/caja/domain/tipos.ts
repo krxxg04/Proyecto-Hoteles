@@ -46,6 +46,9 @@ export type Alerta = {
   detalle: string | null;
   origen: string | null;
   atendida: boolean;
+  /** Cuando y quien la atendio. Van juntos: una fecha sin nombre no cierra nada. */
+  atendida_at: string | null;
+  atendida_por_nombre: string | null;
   requiere_validacion: boolean;
   created_at: string;
 };

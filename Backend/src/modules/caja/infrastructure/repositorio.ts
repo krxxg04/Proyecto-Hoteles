@@ -131,7 +131,9 @@ export async function buscarAlertas(soloAbiertas: boolean, limite = 50) {
   const supabase = await clienteServidor();
   const query = supabase
     .from('alertas')
-    .select('id, severidad, titulo, detalle, origen, atendida, requiere_validacion, created_at')
+    .select(
+      'id, severidad, titulo, detalle, origen, atendida, atendida_at, requiere_validacion, created_at, profiles!alertas_atendida_por_fkey(nombre)'
+    )
     .order('created_at', { ascending: false })
     .limit(limite);
 

@@ -10,7 +10,8 @@ export default async function Alertas() {
   const [incidencias, resumen, alertas] = await Promise.all([
     listarIncidencias(true),
     resumenPanel(),
-    listarAlertas(),
+    // `true` = incluye las ya atendidas: el historial se guarda y hay que poder verlo.
+    listarAlertas(true),
   ]);
   if (!incidencias.ok) return <ErrorCaja mensaje={incidencias.error} />;
 
