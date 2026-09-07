@@ -3,6 +3,7 @@
 import { exigirSesion } from '@/shared/sesion';
 import { conOrigen } from '@/shared/origen';
 import { exito, fallo, type Resultado } from '@/shared/resultado';
+import { ETIQUETA_ESTADO, type EstadoCuarto } from '@/modules/cuartos/domain/tipos';
 import { normalizar, interpretarConReglas, type Intencion } from '../domain/reglas';
 import { extraerCampo } from '../domain/campos';
 import {
@@ -92,6 +93,21 @@ export async function interpretar(
   const sinResolver = referenciasSinResolver(paso.intencion, catalogo);
   const pendientes = [...new Set([...faltantes, ...sinResolver])];
 
+  /**
+   * Coherencia con el negocio, ANTES de seguir preguntando.
+   *
+   * Va aquí y no al ejecutar porque el orden importa: un check-in a un cuarto ocupado
+   * fallaba al confirmar, después de haber preguntado el nombre y el documento del
+   * huésped. Cuatro preguntas y un DNI recogido para nada — que es exactamente lo que
+   * la Ley 29733 no permite pedir «por si acaso», y lo que ya se corrigió una vez para
+   * el corte por rol (§5). La base sigue validando al ejecutar; esto es lo que evita
+   * llegar hasta allí.
+   */
+  const incoherencia = incoherenciaDe(paso.intencion, catalogo);
+  if (incoherencia) {
+    return exito({ tipo: 'sin_entender', mensaje: incoherencia, sugerencias });
+  }
+
   if (pendientes.length > 0) {
     const siguiente = pendientes[0];
 
@@ -134,6 +150,49 @@ export async function interpretar(
     tipo: 'tarjeta',
     tarjeta: armarTarjeta(paso.intencion, catalogo, paso.origen, paso.confianza),
   });
+}
+
+// --------------------------------------------------------- coherencia de negocio
+
+/** Los únicos estados desde los que se puede hacer un check-in (`sugerir_cuarto`). */
+const ADMITEN_CHECKIN: EstadoCuarto[] = ['lista', 'libre'];
+
+/**
+ * Lo que la base va a rechazar y aquí se puede saber ya.
+ *
+ * No duplica las reglas: las repite en el sitio donde sirven para no molestar a nadie.
+ * La verdad sigue estando en SQL —`registrar_checkin` valida estado y aforo— y esto
+ * solo evita recorrer una conversación entera para acabar en un error rojo.
+ *
+ * Devuelve `null` cuando no hay nada que objetar, y un mensaje cuando sí.
+ */
+function incoherenciaDe(intencion: Intencion, catalogo: Catalogo): string | null {
+  const p = intencion.parametros;
+
+  if (intencion.accion !== 'registrar_checkin') return null;
+
+  const cuarto = resolverCuarto(p.cuarto as string | undefined, catalogo);
+  if (!cuarto) return null; // Sin resolver todavía; lo pregunta el flujo normal.
+
+  if (!ADMITEN_CHECKIN.includes(cuarto.estado)) {
+    const libres = catalogo.cuartos
+      .filter((c) => ADMITEN_CHECKIN.includes(c.estado))
+      .map((c) => c.numero);
+
+    return (
+      `La ${cuarto.numero} está en "${ETIQUETA_ESTADO[cuarto.estado]}" y no admite check-in. ` +
+      (libres.length
+        ? `Las que sí lo admiten ahora: ${libres.join(', ')}.`
+        : 'Ahora mismo no hay ninguna disponible.')
+    );
+  }
+
+  const personas = Number(p.personas ?? 0);
+  if (personas > cuarto.aforo) {
+    return `La ${cuarto.numero} es para ${cuarto.aforo} persona${cuarto.aforo === 1 ? '' : 's'} y me dices ${personas}. Elige otra habitación o corrige el número.`;
+  }
+
+  return null;
 }
 
 // ------------------------------------------------------------ salir del atasco

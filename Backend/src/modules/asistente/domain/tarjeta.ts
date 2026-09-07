@@ -1,8 +1,10 @@
+import type { EstadoCuarto } from '@/modules/cuartos/domain/tipos';
 import type { Accion } from './acciones';
 
 /** Lo que el hostal tiene ahora mismo, para resolver "la 203" o "toallas" a un id real. */
 export type Catalogo = {
-  cuartos: Array<{ id: string; numero: string }>;
+  /** `estado` y `aforo` van aquí para poder avisar de una incoherencia sin ir a la base. */
+  cuartos: Array<{ id: string; numero: string; estado: EstadoCuarto; aforo: number }>;
   productos: Array<{ id: string; nombre: string; categoria: string; unidad: string }>;
 };
 

@@ -51,8 +51,25 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
   if (!t) return null;
 
   const cuarto = detectarCuarto(t, catalogo);
+
+  /**
+   * Un número que parece habitación pero no existe.
+   *
+   * Sin esto, «un agua con yape a la 302» —cuando la 302 no existe— salía como
+   * «Cobrar **302** Agua 500 ml»: al no reconocerse como cuarto, el número se quedaba
+   * en el texto y `detectarCantidad` lo tomaba como la cantidad. Confirmar eso vendía
+   * 302 aguas.
+   *
+   * Se arrastra como si fuera el cuarto para que la capa de aplicación lo marque como
+   * referencia sin resolver: así el asistente pregunta la habitación y, si insisten,
+   * responde con las que de verdad tiene. Tres dígitos o más para no pisar cantidades,
+   * que en un hostal son de uno o dos.
+   */
+  const fantasma = cuarto ? null : (t.match(/\b\d{3,4}\b/) ?? [null])[0];
+
   // El número del cuarto se saca del texto para que no se confunda con una cantidad.
-  const sinCuarto = cuarto ? t.replace(cuarto, ' ') : t;
+  const numeroDicho = cuarto ?? fantasma;
+  const sinCuarto = numeroDicho ? t.replace(numeroDicho, ' ') : t;
 
   const producto = detectarProducto(sinCuarto, catalogo);
   const cantidad = detectarCantidad(sinCuarto) ?? 1;
@@ -66,7 +83,7 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
       const nombre = limpiarNombre(t.replace(/.*\b(se hospedo|hospedado|estuvo antes|es cliente|conoces a)\b/, ''));
       if (nombre.length >= 2) return { accion: 'buscar_huesped', parametros: { texto: nombre } };
     }
-    if (cuarto) return { accion: 'consultar_cuarto', parametros: { cuarto } };
+    if (numeroDicho) return { accion: 'consultar_cuarto', parametros: { cuarto: numeroDicho } };
     if (/\bqueda|quedan|hay|stock|inventario\b/.test(t)) {
       return { accion: 'consultar_stock', parametros: { producto: producto ?? null } };
     }
@@ -92,7 +109,7 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
     const noches = cantidadAntesDe(t, 'noche');
     const horas = cantidadAntesDe(t, 'hora');
 
-    if (cuarto) parametros.cuarto = cuarto;
+    if (numeroDicho) parametros.cuarto = numeroDicho;
     if (modo) parametros.modo = modo;
     if (noches) parametros.noches = noches;
     if (horas) parametros.horas = horas;
@@ -127,19 +144,19 @@ export function interpretarConReglas(texto: string, catalogo: Catalogo): Intenci
     if (producto) {
       return {
         accion: 'vender_producto',
-        parametros: { producto, cantidad, cuarto: cuarto ?? null, medio: medio ?? 'efectivo' },
+        parametros: { producto, cantidad, cuarto: numeroDicho ?? null, medio: medio ?? 'efectivo' },
       };
     }
   }
 
-  if (/\blleva|llevale|entrega|entregale|sube|subele|manda|mandale\b/.test(t) || (cuarto && producto)) {
-    if (cuarto && producto) {
-      return { accion: 'entregar_a_cuarto', parametros: { producto, cantidad, cuarto } };
+  if (/\blleva|llevale|entrega|entregale|sube|subele|manda|mandale\b/.test(t) || (numeroDicho && producto)) {
+    if (numeroDicho && producto) {
+      return { accion: 'entregar_a_cuarto', parametros: { producto, cantidad, cuarto: numeroDicho } };
     }
   }
 
-  if (cuarto && estado) {
-    return { accion: 'cambiar_estado_cuarto', parametros: { cuarto, estado } };
+  if (numeroDicho && estado) {
+    return { accion: 'cambiar_estado_cuarto', parametros: { cuarto: numeroDicho, estado } };
   }
 
   return null;
