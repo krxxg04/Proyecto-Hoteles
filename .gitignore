@@ -41,3 +41,19 @@ desktop.ini
 # Notas de credenciales sueltas (los valores viven en .env.local)
 Credentials.md
 credentials*.md
+
+# === Notas y borradores internos (no son la documentación del proyecto) ===
+# context.md, plan.md, ESTADO.md y los ADR-*.md SÍ se versionan a propósito:
+# esto es para apuntes de trabajo que no le sirven a nadie más que a quien los escribió.
+NOTAS.md
+notas*.md
+TODO.md
+todo*.md
+borrador*.md
+apuntes*.md
+scratch/
+
+# === Scripts sueltos de prueba ===
+# Convención: un script de un solo uso (probar algo contra la base, un smoke test) se
+# nombra con "_" adelante — así se sabe que es desechable y no queda versionado por error.
+**/scripts/_*
