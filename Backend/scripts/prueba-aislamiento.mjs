@@ -820,6 +820,50 @@ comprobar(
   'el socket entregó datos a quien no tiene sesión'
 );
 
+/**
+ * Igual que `escuchar()`, pero sobre `productos` — la tabla que suma la 18 para el
+ * Realtime de Inventario. Duplicada a propósito en vez de generalizar `escuchar()`:
+ * es un gate de seguridad ya probado, y no vale el riesgo de tocarlo para ahorrar
+ * unas líneas.
+ */
+async function escucharProducto(clienteEscucha, etiqueta, tenantDelCambio) {
+  const { data: fila } = await admin
+    .from('productos').select('id, stock, tenant_id').eq('tenant_id', tenantDelCambio).limit(1).single();
+
+  const conDatos = [];
+  const canal = clienteEscucha
+    .channel(`aislamiento-productos-${etiqueta}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, (m) => {
+      const trajo = Object.keys(m.new ?? {}).length > 0 || Object.keys(m.old ?? {}).length > 0;
+      const esLaFila = (m.new?.id ?? m.old?.id) === fila.id;
+      if (trajo && esLaFila) conDatos.push(m);
+    })
+    .subscribe();
+
+  await new Promise((r) => setTimeout(r, 3000));
+  await admin.from('productos').update({ stock: fila.stock + 1 }).eq('id', fila.id);
+  await new Promise((r) => setTimeout(r, 4000));
+  await admin.from('productos').update({ stock: fila.stock }).eq('id', fila.id);
+
+  await clienteEscucha.removeChannel(canal);
+  return conDatos;
+}
+
+const propioProd = await escucharProducto(clienteB, 'propio', tenantB);
+comprobar('B recibe los cambios de productos de su propio hostal', propioProd.length > 0, 'no llegó ninguna fila');
+comprobar(
+  'y solo con filas de su hostal (productos)',
+  propioProd.every((m) => (m.new?.tenant_id ?? tenantB) === tenantB),
+  'llegó una fila con otro tenant_id'
+);
+
+const ajenoProd = await escucharProducto(clienteB, 'ajeno', tenantA);
+comprobar(
+  'B NO recibe los productos del hostal A',
+  ajenoProd.length === 0,
+  `le llegó un producto ajeno (${ajenoProd[0]?.new?.nombre})`
+);
+
 // --------------------------------------------------- 8 · origen en auditoría
 
 bloque('8 · Auditoría — queda registrado de dónde vino la escritura');

@@ -19,9 +19,19 @@ export type EstadoEnVivo = 'conectando' | 'en_vivo' | 'sin_conexion';
  *
  * El Realtime de Supabase respeta el RLS: sin sesión no llega nada, y con sesión solo
  * llega lo del propio hostal. Lo comprueba `scripts/prueba-aislamiento.mjs`.
+ *
+ * Acepta una tabla o varias: Caja, por ejemplo, cambia con una venta, un gasto o un
+ * cierre de turno — tres tablas distintas para la misma pantalla. Un solo canal con
+ * un `.on(...)` por tabla, no un hook por tabla: así hay una sola conexión que abrir
+ * y un solo estado que mostrar.
  */
-export function useEnVivo(tabla: string): EstadoEnVivo {
+export function useEnVivo(tablas: string | string[]): EstadoEnVivo {
   const router = useRouter();
+  const lista = Array.isArray(tablas) ? tablas : [tablas];
+  // Clave estable para el efecto: un array literal inline es un objeto nuevo en cada
+  // render, y comparado por referencia reengancharía el canal sin necesidad.
+  const clave = lista.join(',');
+
   // Si no hay cliente no hay nada que conectar: se sabe antes del primer render,
   // así que es el estado inicial y no un efecto que dispara un render de más.
   const [estado, setEstado] = useState<EstadoEnVivo>(() =>
@@ -62,16 +72,21 @@ export function useEnVivo(tabla: string): EstadoEnVivo {
       }
       supabase.realtime.setAuth(data.session.access_token);
 
-      canal = supabase
-        .channel(`en-vivo:${tabla}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: tabla }, refrescarPronto)
-        .subscribe((estadoCanal) => {
-          if (!vigente) return;
-          if (estadoCanal === 'SUBSCRIBED') setEstado('en_vivo');
-          else if (estadoCanal === 'CHANNEL_ERROR' || estadoCanal === 'TIMED_OUT') {
-            setEstado('sin_conexion');
-          }
-        });
+      let construyendo = supabase.channel(`en-vivo:${clave}`);
+      for (const tabla of lista) {
+        construyendo = construyendo.on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: tabla },
+          refrescarPronto
+        );
+      }
+      canal = construyendo.subscribe((estadoCanal) => {
+        if (!vigente) return;
+        if (estadoCanal === 'SUBSCRIBED') setEstado('en_vivo');
+        else if (estadoCanal === 'CHANNEL_ERROR' || estadoCanal === 'TIMED_OUT') {
+          setEstado('sin_conexion');
+        }
+      });
     })();
 
     return () => {
@@ -80,7 +95,8 @@ export function useEnVivo(tabla: string): EstadoEnVivo {
       if (temporizador.current) clearTimeout(temporizador.current);
       if (canal) supabase.removeChannel(canal);
     };
-  }, [tabla, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `clave` ya resume `lista`.
+  }, [clave, router]);
 
   return estado;
 }

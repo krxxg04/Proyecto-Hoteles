@@ -10,6 +10,8 @@ import { ETIQUETA_MEDIO, MEDIOS_PAGO, type MedioPago } from '@/shared/dominio/ti
 import { Boton, Campo, Card, Chip, ErrorCaja, Pildora, Vacio, soles } from '@/shared/ui/primitivos';
 import { EncabezadoSeccion } from '@/shared/ui/tabla';
 import { fechaYHora } from '@/shared/ui/fechas';
+import { useEnVivo } from '@/shared/ui/useEnVivo';
+import { PuntoEnVivo } from '@/shared/ui/PuntoEnVivo';
 
 /**
  * Caja y turno. El cierre exige contar el inventario y justificar cada descuadre:
@@ -34,6 +36,11 @@ export function VistaCaja({
   const [error, setError] = useState<string | null>(null);
   const [ocupado, empezar] = useTransition();
 
+  // Una venta, un gasto o un cierre de turno son tres tablas distintas, pero la
+  // pantalla es una sola: si alguien abre el turno o registra un gasto desde su propia
+  // sesión, este resumen no debe quedarse mostrando lo de antes.
+  const enVivo = useEnVivo(['ventas', 'gastos', 'turnos', 'caja_estado']);
+
   const abierto = !!caja.turno;
 
   function pedirConteo() {
@@ -51,17 +58,20 @@ export function VistaCaja({
         titulo="Caja"
         subtitulo={abierto ? 'Turno abierto' : 'Sin turno abierto'}
         accion={
-          abierto ? (
-            <Boton variante="primario" onClick={pedirConteo} disabled={ocupado}>
-              <Lock className="size-4" />
-              Cerrar turno
-            </Boton>
-          ) : (
-            <Boton variante="primario" onClick={() => setAbriendo(true)}>
-              <LockOpen className="size-4" />
-              Abrir turno
-            </Boton>
-          )
+          <>
+            <PuntoEnVivo estado={enVivo} />
+            {abierto ? (
+              <Boton variante="primario" onClick={pedirConteo} disabled={ocupado}>
+                <Lock className="size-4" />
+                Cerrar turno
+              </Boton>
+            ) : (
+              <Boton variante="primario" onClick={() => setAbriendo(true)}>
+                <LockOpen className="size-4" />
+                Abrir turno
+              </Boton>
+            )}
+          </>
         }
       />
 

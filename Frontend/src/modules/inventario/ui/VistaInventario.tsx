@@ -10,6 +10,8 @@ import { registrarGasto } from '@/modules/caja/infrastructure/acciones';
 import { MEDIOS_PAGO, ETIQUETA_MEDIO, type MedioPago, type Rol } from '@/shared/dominio/tipos';
 import { esDeCaja } from '@/shared/ui/navegacion';
 import { Boton, Campo, ErrorCaja, Pildora, Vacio, soles } from '@/shared/ui/primitivos';
+import { useEnVivo } from '@/shared/ui/useEnVivo';
+import { PuntoEnVivo } from '@/shared/ui/PuntoEnVivo';
 
 /** Niveles con barra y días de cobertura, como la vista Inventario del mockup. */
 
@@ -41,6 +43,10 @@ export function VistaInventario({
   const [error, setError] = useState<string | null>(null);
   const [enviando, empezar] = useTransition();
 
+  // Vender, entregar, comprar o ajustar mueven `productos.stock`: si otra persona lo
+  // toca desde su propia pantalla, esta se entera sola.
+  const enVivo = useEnVivo('productos');
+
   const visibles = productos.filter((p) => {
     if (filtro === 'critico') return p.bajoMinimo || p.semaforo === 'danger';
     if (filtro === 'todos') return true;
@@ -68,7 +74,7 @@ export function VistaInventario({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Pildora activa={filtro === 'todos'} onClick={() => setFiltro('todos')}>
           Todos ({productos.length})
         </Pildora>
@@ -83,6 +89,9 @@ export function VistaInventario({
             Por reponer ({criticos})
           </Pildora>
         )}
+        <span className="ml-auto">
+          <PuntoEnVivo estado={enVivo} />
+        </span>
       </div>
 
       {error && <ErrorCaja mensaje={error} />}
