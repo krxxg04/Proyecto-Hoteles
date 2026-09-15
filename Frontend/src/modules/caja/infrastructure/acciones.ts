@@ -53,3 +53,18 @@ export async function registrarGasto(entrada: {
 export async function atenderAlerta(id: string): Promise<Resultado<null>> {
   return pedirCliente<null>('/api/alertas', { metodo: 'PATCH', cuerpo: { id } });
 }
+
+/** Reclasifica como `recurrente` todo lo que ya se registró como `otro` con ese texto. */
+export async function aprobarGastoRecurrente(patronId: string): Promise<Resultado<null>> {
+  return pedirCliente<null>('/api/alertas', {
+    metodo: 'POST',
+    cuerpo: { patron_id: patronId, decision: 'aprobar' },
+  });
+}
+
+export async function descartarGastoRecurrente(patronId: string): Promise<Resultado<null>> {
+  return pedirCliente<null>('/api/alertas', {
+    metodo: 'POST',
+    cuerpo: { patron_id: patronId, decision: 'descartar' },
+  });
+}
