@@ -62,6 +62,11 @@ export type Alerta = {
   atendida_por_nombre: string | null;
   requiere_validacion: boolean;
   created_at: string;
+  /**
+   * Si esta alerta es "este gasto se repitió 5 veces", el id del patrón que hay que
+   * aprobar o descartar. `null` en cualquier otra alerta.
+   */
+  patron_id: string | null;
 };
 
 /** Una línea del conteo de cierre: qué debería haber vs qué hay. */
