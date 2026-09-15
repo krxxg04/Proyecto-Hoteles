@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { uno } from '@/shared/supabase/embebido';
 import { revalidatePath } from 'next/cache';
-import { exigirRol, exigirSesion, ROLES_CAJA } from '@/shared/sesion';
+import { exigirRol, exigirSesion, ROLES_CAJA, ROLES_ADMIN } from '@/shared/sesion';
 import { exito, fallo, traducirError, type Resultado } from '@/shared/resultado';
 import type { Alerta, Gasto } from '../domain/tipos';
 import { GastoSchema } from '../domain/esquemas';
@@ -76,10 +76,20 @@ export async function listarAlertas(soloAbiertas = true): Promise<Resultado<Aler
    * está `uno()`. Se aplana aquí para que la pantalla reciba un nombre y no una relación.
    */
   const filas = (data ?? []) as Array<Record<string, unknown>>;
+
+  // Qué alertas son en realidad "este gasto se repitió 5 veces" — una consulta aparte
+  // porque `gastos_patrones` no tiene una FK que PostgREST pueda seguir hacia `alertas`.
+  const ids = filas.map((a) => a.id as string);
+  const { data: patrones } = await repo.buscarPatronesPorAlerta(ids);
+  const patronPorAlerta = new Map(
+    ((patrones ?? []) as Array<{ id: string; alerta_id: string }>).map((p) => [p.alerta_id, p.id])
+  );
+
   return exito(
     filas.map(({ profiles, ...a }) => ({
       ...a,
       atendida_por_nombre: uno(profiles as { nombre: string } | null)?.nombre ?? null,
+      patron_id: patronPorAlerta.get(a.id as string) ?? null,
     })) as Alerta[]
   );
 }
@@ -89,6 +99,32 @@ export async function atenderAlerta(id: string): Promise<Resultado<null>> {
   await exigirRol(...ROLES_CAJA);
 
   const { error } = await repo.atenderAlerta(id);
+  if (error) return fallo(traducirError(error));
+
+  revalidatePath('/alertas');
+  return exito(null);
+}
+
+/**
+ * Un "otro gasto" que se repitió 5 veces con el mismo texto. Solo el administrador
+ * decide si de verdad pasa a recurrente — reclasifica también lo ya registrado, no
+ * solo lo que se cargue de ahora en adelante.
+ */
+export async function aprobarGastoRecurrente(patronId: string): Promise<Resultado<null>> {
+  await exigirRol(...ROLES_ADMIN);
+
+  const { error } = await repo.aprobarGastoRecurrente(patronId);
+  if (error) return fallo(traducirError(error));
+
+  revalidatePath('/caja');
+  revalidatePath('/alertas');
+  return exito(null);
+}
+
+export async function descartarGastoRecurrente(patronId: string): Promise<Resultado<null>> {
+  await exigirRol(...ROLES_ADMIN);
+
+  const { error } = await repo.descartarGastoRecurrente(patronId);
   if (error) return fallo(traducirError(error));
 
   revalidatePath('/alertas');
