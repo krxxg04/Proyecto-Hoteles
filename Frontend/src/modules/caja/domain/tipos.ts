@@ -22,12 +22,27 @@ export type EstadoCaja = {
   es_de_otro: boolean;
 };
 
-export const CATEGORIAS_GASTO = ['fijo', 'justificable'] as const;
+/**
+ * `fijo`: comprar un producto del catálogo — "Gastos listados".
+ * `recurrente`: no está en el catálogo pero se repite — gas, un plomero, escobas.
+ * `otro`: tampoco está en el catálogo, y no se espera — un pinchazo, algo puntual.
+ */
+export const CATEGORIAS_GASTO = ['fijo', 'recurrente', 'otro'] as const;
 export type CategoriaGasto = (typeof CATEGORIAS_GASTO)[number];
+
+/** Un solo lugar para el texto de cada categoría: el botón, la insignia y el diálogo lo repiten. */
+export const ETIQUETA_CATEGORIA_GASTO: Record<CategoriaGasto | 'justificable', string> = {
+  fijo: 'Gasto listado',
+  recurrente: 'Gasto recurrente',
+  otro: 'Otro gasto',
+  // Filas de antes de separar `recurrente` y `otro`.
+  justificable: 'Otro gasto',
+};
 
 export type Gasto = {
   id: string;
-  categoria: CategoriaGasto;
+  /** Las filas de antes de esta migración pueden traer el `justificable` original. */
+  categoria: CategoriaGasto | 'justificable';
   producto_id: string | null;
   cantidad: number | null;
   concepto: string;
