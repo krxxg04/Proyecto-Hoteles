@@ -14,6 +14,17 @@ export async function slugDelHostal(tenantId: string) {
   return supabase.from('tenants').select('slug').eq('id', tenantId).single();
 }
 
+export async function obtenerLimpiezaHabilitada(tenantId: string) {
+  const supabase = await clienteServidor();
+  return supabase.from('tenants').select('limpieza_habilitada').eq('id', tenantId).single();
+}
+
+/** `tenants_upd` (01, §14) ya deja al administrador actualizar su propio tenant. */
+export async function actualizarLimpiezaHabilitada(tenantId: string, habilitada: boolean) {
+  const supabase = await clienteServidor();
+  return supabase.from('tenants').update({ limpieza_habilitada: habilitada }).eq('id', tenantId);
+}
+
 export async function emailDeDni(dni: string, slug: string) {
   const supabase = await clienteServidor();
   return supabase.rpc('email_de_dni', { p_dni: dni, p_slug: slug });
