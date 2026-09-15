@@ -55,6 +55,25 @@ export async function sesionActual(): Promise<Sesion | null> {
 export async function exigirSesion(): Promise<Sesion> {
   const sesion = await sesionActual();
   if (!sesion) throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+
+  /**
+   * No todos los hostales necesitan el cargo de limpieza aparte. Si el administrador
+   * lo apaga, quien ya tenga ese rol queda bloqueado de inmediato — no solo en el
+   * próximo login. Solo se paga la consulta extra cuando el rol es limpieza: para
+   * el resto de las sesiones no cuesta nada.
+   */
+  if (sesion.rol === 'limpieza') {
+    const supabase = await clienteServidor();
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('limpieza_habilitada')
+      .eq('id', sesion.tenantId)
+      .single();
+    if (tenant && tenant.limpieza_habilitada === false) {
+      throw new Error('El rol de limpieza está desactivado en este hostal. Avisa al administrador.');
+    }
+  }
+
   return sesion;
 }
 
