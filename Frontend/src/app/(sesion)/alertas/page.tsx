@@ -1,5 +1,6 @@
 import { listarAlertas, listarIncidencias } from '@/modules/caja/infrastructure/lecturas';
 import { resumenPanel } from '@/modules/reportes/infrastructure/lecturas';
+import { miSesion } from '@/modules/auth/infrastructure/lecturas';
 import { VistaIncidencias } from '@/modules/caja/ui/VistaIncidencias';
 import { ErrorCaja } from '@/shared/ui/primitivos';
 import { exigirSeccion } from '@/shared/ui/guardia';
@@ -7,11 +8,12 @@ import { exigirSeccion } from '@/shared/ui/guardia';
 export default async function Alertas() {
   await exigirSeccion('alertas');
 
-  const [incidencias, resumen, alertas] = await Promise.all([
+  const [incidencias, resumen, alertas, sesion] = await Promise.all([
     listarIncidencias(true),
     resumenPanel(),
     // `true` = incluye las ya atendidas: el historial se guarda y hay que poder verlo.
     listarAlertas(true),
+    miSesion(),
   ]);
   if (!incidencias.ok) return <ErrorCaja mensaje={incidencias.error} />;
 
@@ -20,6 +22,7 @@ export default async function Alertas() {
       incidencias={incidencias.datos}
       bajoMinimo={resumen.ok ? resumen.datos.bajoMinimo : []}
       alertas={alertas.ok ? alertas.datos : []}
+      esAdmin={sesion?.rol === 'administrador'}
     />
   );
 }
