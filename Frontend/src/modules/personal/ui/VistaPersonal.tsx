@@ -2,15 +2,21 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, ToggleLeft, ToggleRight, X } from 'lucide-react';
 import type { Perfil } from '../domain/tipos';
-import { crearPersona, desactivarPersona } from '../infrastructure/acciones';
+import { crearPersona, desactivarPersona, establecerLimpiezaHabilitada } from '../infrastructure/acciones';
 import { ROLES, ETIQUETA_ROL, type Rol } from '@/shared/dominio/tipos';
 import { Boton, Campo, Chip, ErrorCaja, Pildora } from '@/shared/ui/primitivos';
 import { Celda, EncabezadoSeccion, Fila, Tabla } from '@/shared/ui/tabla';
 
 /** Registro del equipo. El PIN nunca se lee: se reemplaza. */
-export function VistaPersonal({ personal }: { personal: Perfil[] }) {
+export function VistaPersonal({
+  personal,
+  limpiezaHabilitada,
+}: {
+  personal: Perfil[];
+  limpiezaHabilitada: boolean;
+}) {
   const router = useRouter();
   const [creando, setCreando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +26,15 @@ export function VistaPersonal({ personal }: { personal: Perfil[] }) {
     setError(null);
     empezar(async () => {
       const r = await desactivarPersona(p.id);
+      if (!r.ok) setError(r.error);
+      else router.refresh();
+    });
+  }
+
+  function alternarLimpieza() {
+    setError(null);
+    empezar(async () => {
+      const r = await establecerLimpiezaHabilitada(!limpiezaHabilitada);
       if (!r.ok) setError(r.error);
       else router.refresh();
     });
@@ -37,6 +52,30 @@ export function VistaPersonal({ personal }: { personal: Perfil[] }) {
           </Boton>
         }
       />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-bg-ter hair px-4 py-3">
+        <div>
+          <p className="text-[13.5px] font-medium">Cargo de limpieza</p>
+          <p className="text-[12px] text-tx-muted">
+            {limpiezaHabilitada
+              ? 'Este hostal lo usa como un rol aparte.'
+              : 'Desactivado: nadie con este rol puede iniciar sesión ni se puede asignar a alguien nuevo.'}
+          </p>
+        </div>
+        <Boton variante="secundario" disabled={ocupado} onClick={alternarLimpieza}>
+          {limpiezaHabilitada ? (
+            <>
+              <ToggleRight className="size-4 text-success" />
+              Activado
+            </>
+          ) : (
+            <>
+              <ToggleLeft className="size-4 text-tx-muted" />
+              Desactivado
+            </>
+          )}
+        </Boton>
+      </div>
 
       {error && <ErrorCaja mensaje={error} />}
 
@@ -76,6 +115,7 @@ export function VistaPersonal({ personal }: { personal: Perfil[] }) {
 
       {creando && (
         <DialogoPersona
+          limpiezaHabilitada={limpiezaHabilitada}
           onCerrar={() => setCreando(false)}
           onHecho={() => {
             setCreando(false);
@@ -87,7 +127,15 @@ export function VistaPersonal({ personal }: { personal: Perfil[] }) {
   );
 }
 
-function DialogoPersona({ onCerrar, onHecho }: { onCerrar: () => void; onHecho: () => void }) {
+function DialogoPersona({
+  limpiezaHabilitada,
+  onCerrar,
+  onHecho,
+}: {
+  limpiezaHabilitada: boolean;
+  onCerrar: () => void;
+  onHecho: () => void;
+}) {
   const [dni, setDni] = useState('');
   const [nombre, setNombre] = useState('');
   const [rol, setRol] = useState<Rol>('recepcion');
@@ -96,6 +144,10 @@ function DialogoPersona({ onCerrar, onHecho }: { onCerrar: () => void; onHecho: 
   const [error, setError] = useState<string | null>(null);
   const [campo, setCampo] = useState<string | undefined>();
   const [enviando, empezar] = useTransition();
+
+  // Si este hostal no usa el cargo de limpieza, no se ofrece al dar de alta —
+  // el backend lo rechazaría igual, esto es solo no ofrecer algo que va a fallar.
+  const rolesDisponibles = limpiezaHabilitada ? ROLES : ROLES.filter((r) => r !== 'limpieza');
 
   function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -153,7 +205,7 @@ function DialogoPersona({ onCerrar, onHecho }: { onCerrar: () => void; onHecho: 
           <div>
             <span className="mb-1.5 block text-[12.5px] font-medium text-tx-sec">Rol</span>
             <div className="flex flex-wrap gap-2">
-              {ROLES.map((r) => (
+              {rolesDisponibles.map((r) => (
                 <Pildora key={r} activa={rol === r} onClick={() => setRol(r)}>
                   {ETIQUETA_ROL[r]}
                 </Pildora>
