@@ -383,6 +383,30 @@ export const documentoOpenAPI = {
       },
     },
 
+    '/api/personal/configuracion': {
+      get: {
+        tags: ['Personal'],
+        summary: 'Si el hostal usa el cargo de limpieza aparte',
+        description: 'Solo administrador.',
+        responses: respuesta('Configuración del hostal.', {
+          type: 'object',
+          properties: { limpiezaHabilitada: { type: 'boolean' } },
+        }),
+      },
+      patch: {
+        tags: ['Personal'],
+        summary: 'Prender o apagar el cargo de limpieza',
+        description:
+          'Al apagarlo, quien ya tenga rol limpieza queda bloqueado de inmediato (no se borra ni se reasigna a nadie), y no se puede asignar a personal nuevo hasta reactivarlo.',
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: { limpiezaHabilitada: { type: 'boolean' } },
+          required: ['limpiezaHabilitada'],
+        }),
+        responses: respuesta('Guardado.', { type: 'null' }),
+      },
+    },
+
     '/api/panel': {
       get: {
         tags: ['Reportes'],

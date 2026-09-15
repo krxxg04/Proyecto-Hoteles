@@ -22,6 +22,29 @@ export async function listarPersonal(): Promise<Resultado<Perfil[]>> {
   return exito((data ?? []) as Perfil[]);
 }
 
+/**
+ * No todos los hostales necesitan el cargo de limpieza aparte. El administrador
+ * decide, y `exigirSesion()` corta el acceso de quien ya tenga ese rol en cuanto
+ * se apaga — no hace falta borrar ni reasignar a nadie.
+ */
+export async function obtenerConfiguracionPersonal(): Promise<Resultado<{ limpiezaHabilitada: boolean }>> {
+  const sesion = await exigirRol(...ROLES_ADMIN);
+
+  const { data, error } = await repo.obtenerLimpiezaHabilitada(sesion.tenantId);
+  if (error) return fallo(traducirError(error));
+  return exito({ limpiezaHabilitada: data?.limpieza_habilitada ?? true });
+}
+
+export async function establecerLimpiezaHabilitada(habilitada: boolean): Promise<Resultado<null>> {
+  const sesion = await exigirRol(...ROLES_ADMIN);
+
+  const { error } = await repo.actualizarLimpiezaHabilitada(sesion.tenantId, habilitada);
+  if (error) return fallo(traducirError(error));
+
+  revalidatePath('/admin/personal');
+  return exito(null);
+}
+
 export async function crearPersona(
   entrada: z.input<typeof PersonaSchema>
 ): Promise<Resultado<{ id: string; dni: string }>> {
@@ -33,6 +56,13 @@ export async function crearPersona(
 
   // Verificación explícita: abajo se usa una clave que ignora el RLS.
   const sesion = await exigirRol(...ROLES_ADMIN);
+
+  if (parsed.data.rol === 'limpieza') {
+    const { data: config } = await repo.obtenerLimpiezaHabilitada(sesion.tenantId);
+    if (config && config.limpieza_habilitada === false) {
+      return fallo('El rol de limpieza está desactivado en este hostal. Actívalo primero.', 'rol');
+    }
+  }
 
   const { data: tenant } = await repo.slugDelHostal(sesion.tenantId);
   if (!tenant) return fallo('No se pudo identificar el hostal.');
@@ -87,6 +117,13 @@ export async function actualizarPersona(
 
   if (id === sesion.usuarioId && parsed.data.rol !== 'administrador') {
     return fallo('No puedes quitarte a ti mismo el rol de administrador.', 'rol');
+  }
+
+  if (parsed.data.rol === 'limpieza') {
+    const { data: config } = await repo.obtenerLimpiezaHabilitada(sesion.tenantId);
+    if (config && config.limpieza_habilitada === false) {
+      return fallo('El rol de limpieza está desactivado en este hostal. Actívalo primero.', 'rol');
+    }
   }
 
   const { error } = await repo.actualizar(id, {
