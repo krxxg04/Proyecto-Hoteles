@@ -881,8 +881,8 @@ export const documentoOpenAPI = {
         requestBody: cuerpoJson({
           type: 'object',
           properties: {
-            categoria: { type: 'string', enum: ['fijo', 'justificable'] },
-            concepto: { type: 'string', maxLength: 200, description: 'Obligatorio en `justificable`.' },
+            categoria: { type: 'string', enum: ['fijo', 'recurrente', 'otro'] },
+            concepto: { type: 'string', maxLength: 200, description: 'Obligatorio salvo en `fijo`.' },
             monto: { ...Dinero, exclusiveMinimum: 0, description: 'Lo pagado en total.' },
             medio: { type: 'string', enum: [...MEDIOS_PAGO], default: 'efectivo' },
             producto_id: { ...Uuid, description: 'Solo en `fijo`.' },
@@ -890,12 +890,12 @@ export const documentoOpenAPI = {
             justificacion: {
               type: 'string',
               maxLength: 500,
-              description: 'Obligatoria en `justificable`, mínimo 3 caracteres.',
+              description: 'Obligatoria salvo en `fijo`, mínimo 3 caracteres.',
             },
           },
           required: ['categoria', 'monto'],
           example: {
-            categoria: 'justificable',
+            categoria: 'recurrente',
             concepto: 'Escobas y recogedor',
             monto: 40,
             medio: 'efectivo',
@@ -1253,7 +1253,11 @@ export const documentoOpenAPI = {
         type: 'object',
         properties: {
           id: Uuid,
-          categoria: { type: 'string', enum: ['fijo', 'justificable'] },
+          categoria: {
+            type: 'string',
+            enum: ['fijo', 'recurrente', 'otro', 'justificable'],
+            description: '`justificable` solo aparece en gastos registrados antes de separar `recurrente` y `otro`.',
+          },
           producto_id: { ...Uuid, nullable: true },
           cantidad: { type: 'number', nullable: true },
           concepto: { type: 'string' },
