@@ -897,7 +897,8 @@ export const documentoOpenAPI = {
           '| Categoría | Qué pide | Qué hace |',
           '|---|---|---|',
           '| `fijo` | `producto_id` + `cantidad` | descuenta de la caja **y llena el inventario** |',
-          '| `justificable` | `concepto` + `justificacion` | descuenta de la caja y **siempre deja alerta** |',
+          '| `recurrente` | `concepto` + `justificacion` | no está en el catálogo pero se repite (gas, un plomero) — descuenta de la caja y **siempre deja alerta** |',
+          '| `otro` | `concepto` + `justificacion` | tampoco está en el catálogo, y no se espera (un pinchazo) — descuenta de la caja y **siempre deja alerta** |',
           '',
           'Un gasto en efectivo no puede superar lo que hay en la caja. Un `fijo` que se pase',
           'del 30 % sobre `costo_referencia` deja alerta de sobreprecio.',
@@ -963,6 +964,26 @@ export const documentoOpenAPI = {
           required: ['id'],
         }),
         responses: respuesta('Alerta atendida.', { type: 'null' }),
+      },
+      post: {
+        tags: ['Incidencias'],
+        summary: 'Decidir sobre un gasto que se repitió 5 veces',
+        description: [
+          'Solo para la alerta de "este gasto se repitió 5 veces" (`patron_id` no nulo en la',
+          'respuesta de `GET`). Solo administración.',
+          '',
+          '`aprobar` reclasifica como `recurrente` TODO lo que ya se registró como `otro` con',
+          'ese mismo texto, no solo lo nuevo. `descartar` solo cierra la alerta.',
+        ].join('\n'),
+        requestBody: cuerpoJson({
+          type: 'object',
+          properties: {
+            patron_id: Uuid,
+            decision: { type: 'string', enum: ['aprobar', 'descartar'], default: 'aprobar' },
+          },
+          required: ['patron_id'],
+        }),
+        responses: respuesta('Decidido.', { type: 'null' }),
       },
     },
 
@@ -1303,6 +1324,11 @@ export const documentoOpenAPI = {
           atendida: { type: 'boolean' },
           requiere_validacion: { type: 'boolean' },
           created_at: { type: 'string', format: 'date-time' },
+          patron_id: {
+            ...Uuid,
+            nullable: true,
+            description: 'No nulo solo en la alerta de "este gasto se repitió 5 veces" — ver POST /api/alertas.',
+          },
         },
       },
 
