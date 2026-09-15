@@ -2,8 +2,15 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Wallet, LockOpen, Lock, Plus, ShoppingCart, TriangleAlert, X } from 'lucide-react';
-import type { CategoriaGasto, EstadoCaja, Gasto, LineaConteo, ResumenVentas } from '../domain/tipos';
+import { Wallet, LockOpen, Lock, Plus, Repeat, ShoppingCart, TriangleAlert, X } from 'lucide-react';
+import {
+  ETIQUETA_CATEGORIA_GASTO,
+  type CategoriaGasto,
+  type EstadoCaja,
+  type Gasto,
+  type LineaConteo,
+  type ResumenVentas,
+} from '../domain/tipos';
 import type { Producto } from '@/modules/inventario/domain/tipos';
 import { abrirTurno, cerrarTurno, conteoEsperado, registrarGasto } from '../infrastructure/acciones';
 import { ETIQUETA_MEDIO, MEDIOS_PAGO, type MedioPago } from '@/shared/dominio/tipos';
@@ -188,7 +195,11 @@ export function VistaCaja({
                   <ShoppingCart className="size-4" />
                   Comprar producto
                 </Boton>
-                <Boton onClick={() => setGastando('justificable')}>
+                <Boton variante="secundario" onClick={() => setGastando('recurrente')}>
+                  <Repeat className="size-4" />
+                  Gasto recurrente
+                </Boton>
+                <Boton variante="secundario" onClick={() => setGastando('otro')}>
                   <Plus className="size-4" />
                   Otro gasto
                 </Boton>
@@ -199,18 +210,16 @@ export function VistaCaja({
           {gastos.length === 0 ? (
             <Vacio
               titulo="Sin gastos en este turno"
-              detalle="Comprar un producto del catálogo llena el inventario y descuenta de la caja. Cualquier otro gasto necesita justificación."
+              detalle="Comprar un producto del catálogo llena el inventario y descuenta de la caja. Un gasto recurrente u otro gasto necesitan justificación."
             />
           ) : (
             <div className="flex flex-col gap-2">
               {gastos.map((g) => (
                 <Card key={g.id}>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    {g.categoria === 'fijo' ? (
-                      <Chip tono="muted">fijo</Chip>
-                    ) : (
-                      <Chip tono="warning">justificable</Chip>
-                    )}
+                    <Chip tono={g.categoria === 'fijo' ? 'muted' : 'warning'}>
+                      {ETIQUETA_CATEGORIA_GASTO[g.categoria]}
+                    </Chip>
                     <p className="text-[14px] font-medium">{g.concepto}</p>
                     {g.cantidad && (
                       <span className="text-[12.5px] text-tx-muted">
@@ -562,8 +571,9 @@ function DialogoCierre({
  * Registrar un gasto.
  *
  * Un `fijo` es la compra de un producto del catálogo: descuenta de la caja y llena el
- * inventario en la misma operación. Un `justificable` es cualquier otra cosa, y no se
- * puede guardar sin explicar qué fue — la base tampoco lo acepta.
+ * inventario en la misma operación. `recurrente` y `otro` son cualquier otra cosa —la
+ * diferencia entre los dos es solo para poder verlos separados, se guardan igual— y
+ * ninguno se puede guardar sin explicar qué fue: la base tampoco lo acepta.
  */
 function DialogoGasto({
   categoria,
@@ -628,7 +638,7 @@ function DialogoGasto({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="text-[16px] font-semibold">
-              {esFijo ? 'Comprar producto' : 'Otro gasto'}
+              {esFijo ? 'Comprar producto' : ETIQUETA_CATEGORIA_GASTO[categoria]}
             </p>
             <p className="mt-0.5 text-[12.5px] text-tx-muted">
               {esFijo
@@ -677,7 +687,7 @@ function DialogoGasto({
             <Campo
               etiqueta="En qué se gastó"
               autoFocus
-              placeholder="Escobas y recogedor"
+              placeholder={categoria === 'recurrente' ? 'Balón de gas' : 'Reparación de una llanta'}
               value={concepto}
               onChange={(e) => setConcepto(e.target.value)}
               error={campo === 'concepto' ? error ?? undefined : undefined}
@@ -728,7 +738,11 @@ function DialogoGasto({
                 onChange={(e) => setJustificacion(e.target.value)}
                 rows={3}
                 maxLength={500}
-                placeholder="Se rompieron las dos escobas del segundo piso."
+                placeholder={
+                  categoria === 'recurrente'
+                    ? 'Se acabó el gas de la cocina.'
+                    : 'Un huésped pinchó una llanta en el estacionamiento.'
+                }
                 className="w-full resize-none rounded-md bg-bg-ter hair px-3 py-2 text-[14px] text-tx placeholder:text-tx-dis focus:border-brand-500"
               />
               {campo === 'justificacion' && error && (
