@@ -20,3 +20,11 @@ export async function crearPersona(entrada: {
 export async function desactivarPersona(persona_id: string): Promise<Resultado<null>> {
   return pedirCliente<null>('/api/personal', { metodo: 'DELETE', cuerpo: { persona_id } });
 }
+
+/** Si el hostal usa el cargo de limpieza aparte, o no. */
+export async function establecerLimpiezaHabilitada(habilitada: boolean): Promise<Resultado<null>> {
+  return pedirCliente<null>('/api/personal/configuracion', {
+    metodo: 'PATCH',
+    cuerpo: { limpiezaHabilitada: habilitada },
+  });
+}
