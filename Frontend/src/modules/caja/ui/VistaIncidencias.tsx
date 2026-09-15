@@ -2,15 +2,26 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, PackageOpen, ShieldAlert, TriangleAlert } from 'lucide-react';
+import { Check, PackageOpen, Repeat, ShieldAlert, TriangleAlert, X } from 'lucide-react';
 import type { Alerta, Incidencia } from '../domain/tipos';
 import type { ProductoEnAviso } from '@/modules/reportes/domain/tipos';
-import { atenderAlerta, revisarIncidencia } from '../infrastructure/acciones';
+import {
+  atenderAlerta,
+  revisarIncidencia,
+  aprobarGastoRecurrente,
+  descartarGastoRecurrente,
+} from '../infrastructure/acciones';
 import { Boton, Card, Chip, ErrorCaja, Pildora, Vacio } from '@/shared/ui/primitivos';
 import { EncabezadoSeccion } from '@/shared/ui/tabla';
 import { fechaYHora } from '@/shared/ui/fechas';
 
 const TONO_SEVERIDAD = { info: 'info', warning: 'warning', danger: 'danger' } as const;
+
+function etiquetaOrigen(origen: string | null): string {
+  if (origen === 'caja') return 'caja';
+  if (origen === 'gasto_patron') return 'gasto recurrente';
+  return origen ?? 'sistema';
+}
 
 /**
  * Descuadres del cierre de turno.
@@ -78,11 +89,17 @@ function AvisosDeStock({ productos }: { productos: ProductoEnAviso[] }) {
  */
 function AlertasDelSistema({
   alertas,
+  esAdmin,
   onAtender,
+  onAprobarRecurrente,
+  onDescartarRecurrente,
   ocupado,
 }: {
   alertas: Alerta[];
+  esAdmin: boolean;
   onAtender: (id: string) => void;
+  onAprobarRecurrente: (patronId: string) => void;
+  onDescartarRecurrente: (patronId: string) => void;
   ocupado: boolean;
 }) {
   const abiertas = alertas.filter((a) => !a.atendida);
@@ -114,7 +131,7 @@ function AlertasDelSistema({
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-[14px] font-semibold">{a.titulo}</p>
                   <Chip tono={TONO_SEVERIDAD[a.severidad]}>
-                    {a.origen === 'caja' ? 'caja' : a.origen ?? 'sistema'}
+                    {etiquetaOrigen(a.origen)}
                   </Chip>
                 </div>
                 {a.detalle && (
@@ -124,10 +141,35 @@ function AlertasDelSistema({
                 )}
                 <p className="mt-1.5 text-[11.5px] text-tx-muted">{fechaYHora(a.created_at)}</p>
               </div>
-              <Boton variante="secundario" disabled={ocupado} onClick={() => onAtender(a.id)}>
-                <Check className="size-4" />
-                Revisada
-              </Boton>
+              {a.patron_id ? (
+                esAdmin ? (
+                  <div className="flex shrink-0 gap-2">
+                    <Boton
+                      variante="secundario"
+                      disabled={ocupado}
+                      onClick={() => onAprobarRecurrente(a.patron_id!)}
+                    >
+                      <Repeat className="size-4" />
+                      Pasar a recurrente
+                    </Boton>
+                    <Boton
+                      variante="fantasma"
+                      disabled={ocupado}
+                      onClick={() => onDescartarRecurrente(a.patron_id!)}
+                    >
+                      <X className="size-4" />
+                      Descartar
+                    </Boton>
+                  </div>
+                ) : (
+                  <p className="shrink-0 text-[12px] text-tx-muted">Lo decide el administrador</p>
+                )
+              ) : (
+                <Boton variante="secundario" disabled={ocupado} onClick={() => onAtender(a.id)}>
+                  <Check className="size-4" />
+                  Revisada
+                </Boton>
+              )}
             </div>
           </Card>
         ))}
@@ -161,7 +203,7 @@ function AlertasDelSistema({
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-[14px] font-semibold">{a.titulo}</p>
                     <Chip tono={TONO_SEVERIDAD[a.severidad]}>
-                      {a.origen === 'caja' ? 'caja' : a.origen ?? 'sistema'}
+                      {etiquetaOrigen(a.origen)}
                     </Chip>
                   </div>
                   {a.detalle && (
@@ -189,10 +231,12 @@ export function VistaIncidencias({
   incidencias,
   bajoMinimo = [],
   alertas = [],
+  esAdmin = false,
 }: {
   incidencias: Incidencia[];
   bajoMinimo?: ProductoEnAviso[];
   alertas?: Alerta[];
+  esAdmin?: boolean;
 }) {
   const router = useRouter();
   const [filtro, setFiltro] = useState<'abiertas' | 'todas'>('abiertas');
@@ -220,9 +264,34 @@ export function VistaIncidencias({
     });
   }
 
+  function aprobarRecurrente(patronId: string) {
+    setError(null);
+    empezar(async () => {
+      const r = await aprobarGastoRecurrente(patronId);
+      if (!r.ok) setError(r.error);
+      else router.refresh();
+    });
+  }
+
+  function descartarRecurrente(patronId: string) {
+    setError(null);
+    empezar(async () => {
+      const r = await descartarGastoRecurrente(patronId);
+      if (!r.ok) setError(r.error);
+      else router.refresh();
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <AlertasDelSistema alertas={alertas} onAtender={atender} ocupado={ocupado} />
+      <AlertasDelSistema
+        alertas={alertas}
+        esAdmin={esAdmin}
+        onAtender={atender}
+        onAprobarRecurrente={aprobarRecurrente}
+        onDescartarRecurrente={descartarRecurrente}
+        ocupado={ocupado}
+      />
       <AvisosDeStock productos={bajoMinimo} />
 
       <section className="flex flex-col gap-4">
