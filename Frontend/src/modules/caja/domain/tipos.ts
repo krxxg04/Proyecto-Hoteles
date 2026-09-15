@@ -66,6 +66,8 @@ export type Alerta = {
   atendida_por_nombre: string | null;
   requiere_validacion: boolean;
   created_at: string;
+  /** No nulo solo en "este gasto se repitió 5 veces": el id que hay que aprobar o descartar. */
+  patron_id: string | null;
 };
 
 export type ResumenVentas = {
