@@ -23,12 +23,22 @@ export type EstadoCaja = {
   es_de_otro: boolean;
 };
 
-export const CATEGORIAS_GASTO = ['fijo', 'justificable'] as const;
+/**
+ * `fijo`: comprar un producto del catálogo — "Gastos listados".
+ * `recurrente`: no está en el catálogo pero se repite — gas, un plomero, escobas.
+ * `otro`: tampoco está en el catálogo, y no se espera — un pinchazo, algo puntual.
+ *
+ * `recurrente` y `otro` se comportan igual en la base (exigen justificación, siempre
+ * alertan): la distinción es para poder verlos separados en Caja y en los reportes,
+ * no una regla de negocio distinta.
+ */
+export const CATEGORIAS_GASTO = ['fijo', 'recurrente', 'otro'] as const;
 export type CategoriaGasto = (typeof CATEGORIAS_GASTO)[number];
 
 export type Gasto = {
   id: string;
-  categoria: CategoriaGasto;
+  /** Las filas de antes de esta migración pueden traer el `justificable` original. */
+  categoria: CategoriaGasto | 'justificable';
   producto_id: string | null;
   cantidad: number | null;
   concepto: string;

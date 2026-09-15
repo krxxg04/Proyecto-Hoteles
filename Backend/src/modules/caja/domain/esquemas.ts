@@ -30,7 +30,7 @@ export const CierreSchema = z
 
 /**
  * Un gasto. El resto de las reglas están en `registrar_gasto()`: que un fijo lleve producto
- * y cantidad, que un justificable lleve razón, y que sin turno abierto no se registre nada.
+ * y cantidad, que un recurrente u otro lleve razón, y que sin turno abierto no se registre nada.
  */
 export const GastoSchema = z
   .object({
@@ -47,10 +47,10 @@ export const GastoSchema = z
     path: ['producto_id'],
   })
   .refine(
-    (d) => d.categoria !== 'justificable' || (d.justificacion?.trim().length ?? 0) >= 3,
+    (d) => d.categoria === 'fijo' || (d.justificacion?.trim().length ?? 0) >= 3,
     { message: 'Explica en qué se gastó y por qué', path: ['justificacion'] }
   )
-  .refine((d) => d.categoria !== 'justificable' || !!d.concepto?.trim(), {
+  .refine((d) => d.categoria === 'fijo' || !!d.concepto?.trim(), {
     message: 'Dile un nombre al gasto',
     path: ['concepto'],
   });
