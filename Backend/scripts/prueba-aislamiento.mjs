@@ -98,7 +98,7 @@ const TABLAS = [
   'reservas', 'inspecciones', 'caja_estado', 'turnos', 'turno_conteos',
   'incidencias', 'ventas', 'cierres_caja', 'tipo_cambio', 'alertas',
   'integraciones', 'medios', 'consentimientos', 'audit_log', 'gastos',
-  'asistente_mensajes',
+  'asistente_mensajes', 'gastos_patrones',
 ];
 
 /** Sin `tenant_id`: `tenants` se filtra por `id` y los catálogos son globales a propósito. */
@@ -277,6 +277,7 @@ async function sembrarB() {
       usuario_id: usuarioBAdmin, rol: 'administrador',
       texto: 'Mensaje de prueba', resultado: 'tarjeta',
     }],
+    ['gastos_patrones', { concepto_normalizado: 'gasto de prueba', concepto: 'Gasto de prueba' }],
   ];
 
   for (const [tabla, fila, conflicto] of resto) {
@@ -573,7 +574,7 @@ await admin.from('profiles').update({ dni: dniOriginalB }).eq('id', perfilDuplic
 
 bloque('6 · Matriz de roles dentro del mismo hostal (limpieza en B)');
 
-for (const tabla of ['ventas', 'turnos', 'huespedes', 'estadias', 'cierres_caja', 'audit_log', 'asistente_mensajes']) {
+for (const tabla of ['ventas', 'turnos', 'huespedes', 'estadias', 'cierres_caja', 'audit_log', 'asistente_mensajes', 'gastos_patrones']) {
   const { data: hay } = await admin.from(tabla).select('tenant_id').eq('tenant_id', tenantB).limit(1);
   const { data, error } = await clienteLimpiezaB.from(tabla).select('*').limit(5);
   comprobar(
