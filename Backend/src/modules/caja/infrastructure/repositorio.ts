@@ -144,3 +144,20 @@ export async function atenderAlerta(id: string) {
   const supabase = await clienteServidor();
   return supabase.rpc('atender_alerta', { p_alerta_id: id });
 }
+
+/** Qué alertas son en realidad "este gasto se repitió 5 veces". */
+export async function buscarPatronesPorAlerta(alertaIds: string[]) {
+  const supabase = await clienteServidor();
+  if (alertaIds.length === 0) return { data: [], error: null };
+  return supabase.from('gastos_patrones').select('id, alerta_id').in('alerta_id', alertaIds);
+}
+
+export async function aprobarGastoRecurrente(patronId: string) {
+  const supabase = await clienteServidor();
+  return supabase.rpc('aprobar_gasto_recurrente', { p_patron_id: patronId });
+}
+
+export async function descartarGastoRecurrente(patronId: string) {
+  const supabase = await clienteServidor();
+  return supabase.rpc('descartar_gasto_recurrente', { p_patron_id: patronId });
+}
